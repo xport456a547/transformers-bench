@@ -10,10 +10,12 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from transformers import TextDataset, DataCollatorForLanguageModeling, Trainer
 from transformers import TrainingArguments, HfArgumentParser
 from transformers import RobertaTokenizerFast
+from transformers import configuration_roberta
 
 def compute_metrics(pred):
     labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
+    #preds = pred.predictions.argmax(-1)
+    preds = pred.predictions.squeeze(-1)
 
     labels = np.reshape(labels, (1, -1)).squeeze()
     preds = np.reshape(preds, (1, -1)).squeeze()
@@ -83,7 +85,7 @@ def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_on
         metrics = trainer.evaluate()
         eval_loss = metrics["eval_loss"]
         logging.info(f'Eval bpc after pretraining: {eval_loss / math.log(2)}')
-
+    
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='XP FTF')
@@ -128,7 +130,10 @@ if __name__ == "__main__":
     # model = load_model(args.model)
     # args.model must be a dictionary with keys name/
     # TODO delete after substitution
-    from transformers import RobertaForMaskedLM
+
+    #from transformers import RobertaForMaskedLM
+    from modeling import RobertaForMaskedLM
+
     model = RobertaForMaskedLM.from_pretrained('roberta-base')
     # END DELETE
 
