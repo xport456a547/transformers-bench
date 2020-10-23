@@ -139,8 +139,8 @@ class ModelBuilder(object):
         config = self.get_config()
         model = RobertaForMaskedLM(config)
 
-        if self.config["from_pretrained"]:
-            model = model.from_pretrained("roberta-base", config=config)
+        if self.from_pretrained != "" and self.from_pretrained is not None:
+            model = model.from_pretrained(self.from_pretrained, config=config)
 
         return model
 
