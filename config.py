@@ -17,7 +17,7 @@ class RobertaConfig(BertConfig):
         eos_token_id=2, 
         type_vocab_size=1,
         **kwargs):
-        """Constructs LinformerConfig."""
+        """Constructs RobertaConfig."""
         super().__init__(
             pad_token_id=pad_token_id, 
             bos_token_id=bos_token_id, 
@@ -109,7 +109,7 @@ class LongformerConfig(BertConfig):
         bos_token_id=0, 
         eos_token_id=2, 
         type_vocab_size=1,
-        attention_window_size=512, 
+        attention_window=128, 
         **kwargs):
         """Constructs LongformerConfig."""
         super().__init__(
@@ -120,7 +120,8 @@ class LongformerConfig(BertConfig):
             **kwargs
             )
 
-        self.attention_window_size = attention_window_size
+        # We keep the same window for all layers
+        self.attention_window = [attention_window]
 
 class ModelBuilder(object):
 
@@ -133,7 +134,6 @@ class ModelBuilder(object):
         self.from_pretrained = self.config["from_pretrained"]
 
         assert self.model_type in ["roberta", "kernel", "linformer", "avgpooling", "maxpooling", "efficient", "longformer"]
-        assert self.model_type != "longformer", "Not implemented yet"
 
     def get_model(self):
         config = self.get_config()
@@ -167,5 +167,9 @@ class ModelBuilder(object):
         elif self.model_type == "efficient":
             config = EfficientConfig(**self.config)
             transformers.modeling_roberta.RobertaSelfAttention = EfficientSelfAttention
+
+        elif self.model_type == "longformer":
+            config = LongformerConfig(**self.config)
+            transformers.modeling_roberta.RobertaSelfAttention = LongformerSelfAttention_
 
         return config

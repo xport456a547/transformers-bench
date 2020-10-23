@@ -4,6 +4,8 @@ from torch.nn import *
 import torch.nn.functional as F
 import math
 
+from transformers.modeling_longformer import LongformerSelfAttention
+
 class BaseSelfAttention(nn.Module):
 
     def init_modules(self, config):
@@ -356,3 +358,29 @@ class EfficientSelfAttention(BaseSelfAttention):
         context_layer = self.reshape_output(context_layer)
         return (context_layer,)
 
+
+class LongformerSelfAttention_(LongformerSelfAttention):
+    """
+    Modified module to be compatible with Roberta
+    We use the same attention_window for all layers
+    """
+    def __init__(self, config):
+        super().__init__(config=config, layer_id=0)
+
+    def forward(
+        self, 
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=False,):
+
+        # Call parent forward pass which doesnt support **kwargs
+        return super().forward(
+            hidden_states=hidden_states, 
+            attention_mask=attention_mask, 
+            output_attentions=output_attentions
+            )
