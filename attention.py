@@ -56,7 +56,7 @@ class KernelSelfAttention(BaseSelfAttention):
         encoder_attention_mask=None, 
         output_attentions=False
     ):
-
+        
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))

@@ -1,4 +1,3 @@
-#import transformers.modeling_roberta
 from transformers.modeling_roberta import *
 
 class RobertaForMaskedLM(RobertaPreTrainedModel):

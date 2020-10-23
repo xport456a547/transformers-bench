@@ -10,11 +10,9 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from transformers import TextDataset, DataCollatorForLanguageModeling, Trainer
 from transformers import TrainingArguments, HfArgumentParser
 from transformers import RobertaTokenizerFast
-from transformers import configuration_roberta
 
 def compute_metrics(pred):
     labels = pred.label_ids
-    #preds = pred.predictions.argmax(-1)
     preds = pred.predictions.squeeze(-1)
 
     labels = np.reshape(labels, (1, -1)).squeeze()
@@ -97,7 +95,7 @@ if __name__ == "__main__":
     # TODO delete before experiments
     # args = parser.parse_args() # load parameters from sys.argv
     args = parser.parse_args(
-        ['--model', 'model_file', '--train', 'config/training_config.txt', '--dataset', 'config/dataset_config.txt'])
+        ['--model', 'config/model.json', '--train', 'config/training_config.txt', '--dataset', 'config/dataset_config.txt'])
 
     # https://github.com/huggingface/transformers/blob/master/src/transformers/training_args.py
     parser_hf_trainer_args = HfArgumentParser((TrainingArguments,))
@@ -132,17 +130,21 @@ if __name__ == "__main__":
     # TODO delete after substitution
 
     #from transformers import RobertaForMaskedLM
-    from modeling import RobertaForMaskedLM
+    #from modeling import RobertaForMaskedLM
+    #model = RobertaForMaskedLM.from_pretrained('roberta-base')
 
-    model = RobertaForMaskedLM.from_pretrained('roberta-base')
+    from config import ModelBuilder
+    builder = ModelBuilder(path_to_config=args.model, tokenizer=tokenizer)
+    model = builder.get_model()
     # END DELETE
 
     eval_only = args.eval_only
 
+    
     logging.info("training args:" + str(training_args))
     logging.info("dataset  args:" + str(dataset_args))
     logging.info("model args   :" + str(model_args))
     logging.info("eval only: " + str(eval_only))
     logging.info(model)
-
+    
     pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_only)
