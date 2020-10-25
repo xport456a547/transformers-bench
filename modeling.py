@@ -1,4 +1,6 @@
 from transformers.modeling_roberta import *
+from config import *
+
 
 class RobertaForMaskedLM(RobertaPreTrainedModel):
     authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
@@ -35,8 +37,8 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs
-        ):
+        **kwargs,
+    ):
         if "masked_lm_labels" in kwargs:
             warnings.warn(
                 "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
@@ -44,7 +46,9 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.roberta(
             input_ids,
@@ -58,22 +62,26 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            )
+        )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
-        
+
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
+            )
 
         prediction_scores = torch.argmax(prediction_scores, dim=-1, keepdim=True)
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return (
+                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            )
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            )
+        )

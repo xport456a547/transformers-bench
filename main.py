@@ -11,6 +11,7 @@ from transformers import TextDataset, DataCollatorForLanguageModeling, Trainer
 from transformers import TrainingArguments, HfArgumentParser
 from transformers import RobertaTokenizerFast
 
+
 def compute_metrics(pred):
     labels = pred.label_ids
     preds = pred.predictions.squeeze(-1)
@@ -25,23 +26,22 @@ def compute_metrics(pred):
     preds = preds[mask, ...]
 
     # TODO discuss average 'macro'
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='macro')
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        labels, preds, average="macro"
+    )
     acc = accuracy_score(labels, preds)
 
-    metrics = {
-        'accuracy': acc,
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
-    }
+    metrics = {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
     logging.info(metrics)
 
     return metrics
+
 
 @dataclass
 class DatasetArgs:
     val_datapath: str = field(metadata={"help": "validation set"})
     train_datapath: str = field(metadata={"help": "training set"})
+
 
 def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_only):
     """
@@ -54,55 +54,91 @@ def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_on
     :return:
     """
 
-    val_dataset = TextDataset(tokenizer=tokenizer,
-                              file_path=dataset_args.val_datapath,
-                              block_size=tokenizer.max_len)
+    val_dataset = TextDataset(
+        tokenizer=tokenizer,
+        file_path=dataset_args.val_datapath,
+        block_size=tokenizer.max_len,
+    )
     if eval_only:
         train_dataset = val_dataset
     else:
-        logging.info(f'Loading and tokenizing training data is usually slow: {dataset_args.train_datapath}')
-        train_dataset = TextDataset(tokenizer=tokenizer,
-                                    file_path=dataset_args.train_datapath,
-                                    block_size=tokenizer.max_len)
+        logging.info(
+            f"Loading and tokenizing training data is usually slow: {dataset_args.train_datapath}"
+        )
+        train_dataset = TextDataset(
+            tokenizer=tokenizer,
+            file_path=dataset_args.train_datapath,
+            block_size=tokenizer.max_len,
+        )
 
     # https://github.com/huggingface/transformers/blob/master/src/transformers/data/data_collator.py
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer, mlm=True, mlm_probability=0.15
+    )
 
     # https://huggingface.co/transformers/_modules/transformers/trainer.html
-    trainer = Trainer(model=model, args=training_args, data_collator=data_collator,
-                      train_dataset=train_dataset, eval_dataset=val_dataset, compute_metrics=compute_metrics)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        data_collator=data_collator,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        compute_metrics=compute_metrics,
+    )
 
     metrics = trainer.evaluate()
     eval_loss = metrics["eval_loss"]
-    logging.info(f'Initial eval bpc: {eval_loss / math.log(2)}')
+    logging.info(f"Initial eval bpc: {eval_loss / math.log(2)}")
 
     if not eval_only:
-        trainer.train(model_path=None)  # to change if we want to continue training existing models
+
+        # to change if we want to continue training existing models
+        # same path as from_checkpoint argument from the builder
+        trainer.train(model_path=None)  
+
         trainer.save_model()
 
         metrics = trainer.evaluate()
         eval_loss = metrics["eval_loss"]
-        logging.info(f'Eval bpc after pretraining: {eval_loss / math.log(2)}')
-    
+        logging.info(f"Eval bpc after pretraining: {eval_loss / math.log(2)}")
+
+
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='XP FTF')
-    parser.add_argument('--model', help='path model configuration', type=str)
-    parser.add_argument('--train', help='path trainer configuration', type=str)
-    parser.add_argument('--dataset', help='dataset configuration', type=str)
-    parser.add_argument('--eval_only', help='only perform evaluation', default=False, action='store_true')
+    parser = argparse.ArgumentParser(description="XP FTF")
+    parser.add_argument("--model", help="path model configuration", type=str)
+    parser.add_argument("--train", help="path trainer configuration", type=str)
+    parser.add_argument("--dataset", help="dataset configuration", type=str)
+    parser.add_argument(
+        "--eval_only",
+        help="only perform evaluation",
+        default=False,
+        action="store_true",
+    )
 
     # TODO delete before experiments
     # args = parser.parse_args() # load parameters from sys.argv
     args = parser.parse_args(
-        ['--model', 'config/model.json', '--train', 'config/training_config.txt', '--dataset', 'config/dataset_config.txt'])
+        [
+            "--model",
+            "config/model.json",
+            "--train",
+            "config/training_config.txt",
+            "--dataset",
+            "config/dataset_config.txt",
+        ]
+    )
 
     # https://github.com/huggingface/transformers/blob/master/src/transformers/training_args.py
     parser_hf_trainer_args = HfArgumentParser((TrainingArguments,))
-    training_args = parser_hf_trainer_args.parse_args_into_dataclasses(args_filename=args.train)[0]
+    training_args = parser_hf_trainer_args.parse_args_into_dataclasses(
+        args_filename=args.train
+    )[0]
 
     parser_hf_dataset_args = HfArgumentParser((DatasetArgs,))
-    dataset_args = parser_hf_dataset_args.parse_args_into_dataclasses(args_filename=args.dataset)[0]
+    dataset_args = parser_hf_dataset_args.parse_args_into_dataclasses(
+        args_filename=args.dataset
+    )[0]
 
     # TODO Load json file dedicated to the model
     # modification can be done to use a @dataclass as done for dataset_args
@@ -116,35 +152,40 @@ if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_path),
-            logging.StreamHandler()
-        ]
+        handlers=[logging.FileHandler(log_path), logging.StreamHandler()],
     )
 
-    tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
+    tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
 
     # TODO load model using preloaded configuration
     # model = load_model(args.model)
     # args.model must be a dictionary with keys name/
     # TODO delete after substitution
 
-    #from transformers import RobertaForMaskedLM
-    #from modeling import RobertaForMaskedLM
-    #model = RobertaForMaskedLM.from_pretrained('roberta-base')
+    # from transformers import RobertaForMaskedLM
+    # from modeling import RobertaForMaskedLM
+    # model = RobertaForMaskedLM.from_pretrained('roberta-base')
 
-    from config import ModelBuilder
-    builder = ModelBuilder(path_to_config=args.model, tokenizer=tokenizer)
+    from building import ModelBuilder
+
+    # TODO Load directly from a checkpoint folder without specifying a model cfg 
+    # to restore both model and trainer state
+
+    builder = ModelBuilder(
+        path_to_config=args.model, # optional if a checkpoint is provided
+        from_checkpoint=None, # Directory to load a checkpoint (created by the Trainer)
+        vocab_size=len(tokenizer)
+        )
+
     model = builder.get_model()
     # END DELETE
 
     eval_only = args.eval_only
 
-    
     logging.info("training args:" + str(training_args))
     logging.info("dataset  args:" + str(dataset_args))
     logging.info("model args   :" + str(model_args))
     logging.info("eval only: " + str(eval_only))
     logging.info(model)
-    
+
     pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_only)

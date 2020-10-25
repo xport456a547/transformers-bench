@@ -1,6 +1,6 @@
 {
-	"model": "longformer",
-	"from_pretrained": "roberta-base",
+	"model": "efficient",
+	"from_pretrained_roberta": true,
 
 	"num_hidden_layers": 12,
 	"hidden_size": 768,
@@ -19,6 +19,8 @@
 	"kernel_size": 8,
 	"stride": 4,
 
-	"attention_window_size": 128
+	"attention_window": 128,
+
+	"chunk_size": 32
 }
 
