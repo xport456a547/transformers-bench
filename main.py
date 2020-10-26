@@ -147,13 +147,24 @@ if __name__ == "__main__":
     if not os.path.exists(training_args.output_dir):
         os.mkdir(training_args.output_dir)
 
+
+
+
     # TODO add model info in log file name
-    log_path = "{0}/{1}.log".format(training_args.output_dir, model_args["name"])
+    log_path = "{0}/{1}_{2}.log".format(training_args.output_dir, os.path.basename(args.model), os.path.basename(args.dataset))
+
+    import os.path
+    if os.path.isfile(log_path):
+        import uuid
+        log_path = log_path + "_" + str(uuid.uuid4().hex)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[logging.FileHandler(log_path), logging.StreamHandler()],
     )
+
+
 
     tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
 
@@ -182,9 +193,13 @@ if __name__ == "__main__":
 
     eval_only = args.eval_only
 
+    # get model params for logging
+    with open(args.model, "r") as text_file:
+        model_params = text_file.readlines()
+
     logging.info("training args:" + str(training_args))
     logging.info("dataset  args:" + str(dataset_args))
-    logging.info("model args   :" + str(model_args))
+    logging.info("model args   :" + str(model_params))
     logging.info("eval only: " + str(eval_only))
     logging.info(model)
 
