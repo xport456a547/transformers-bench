@@ -1,5 +1,5 @@
 {
-	"model": "efficient",
+	"model": "reformer",
 	"from_pretrained_roberta": true,
 
 	"num_hidden_layers": 12,
@@ -21,6 +21,8 @@
 
 	"attention_window": 128,
 
-	"chunk_size": 32
+	"chunk_size": 32,
+	"bits": 8,
+	"rounds": 4
 }
 

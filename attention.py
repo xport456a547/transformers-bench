@@ -5,7 +5,8 @@ import math
 
 from transformers.modeling_longformer import LongformerSelfAttention
 from transformers.modeling_roberta import RobertaSelfAttention
-
+from fast_transformers.attention.reformer_attention import ReformerAttention
+from fast_transformers.masking import FullMask, LengthMask
 
 class BaseSelfAttention(nn.Module):
     def init_modules(self, config):
@@ -486,3 +487,61 @@ class BlockSelfAttention(BaseSelfAttention):
         size[dim] *= self.n_chunks
         size[0] = size[0] // self.n_chunks
         return x.reshape(*size)
+
+
+class ReformerSelfAttention(BaseSelfAttention):
+    """
+    Adapted from "Reformer: The Efficient Transformer"
+    https://arxiv.org/abs/2001.04451
+
+    Use https://github.com/idiap/fast-transformers/blob/master/fast_transformers/attention/reformer_attention.py
+    Can't return attention_probs
+    Doesn't support headmask
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.reformer = ReformerAttention(
+            chunk_size=config.chunk_size, 
+            bits=config.bits, 
+            rounds=config.rounds, 
+            attention_dropout=config.hidden_dropout_prob
+            )
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+    ):
+
+        n, t, d = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states)).transpose(1, 2)
+        key_layer = self.transpose_for_scores(self.key(hidden_states)).transpose(1, 2)
+        value_layer = self.transpose_for_scores(self.value(hidden_states)).transpose(1, 2)
+
+        # Change mask behavior to be compatible with https://github.com/idiap/fast-transformers
+        attention_mask = (attention_mask.squeeze(1).squeeze(1) + 10000) / 10000
+        attention_mask = FullMask(mask=attention_mask.bool())
+        attention_length = LengthMask(attention_mask.lengths, max_len=t)
+
+        context_layer = self.reformer(
+            queries=query_layer, 
+            keys=key_layer, 
+            values=value_layer, 
+            attn_mask=attention_mask, 
+            query_lengths=attention_length, 
+            key_lengths=attention_length
+            )
+
+        context_layer = self.reshape_output(context_layer.transpose(1, 2))
+
+        return (context_layer,)
+
+    

@@ -158,3 +158,34 @@ class BlockConfig(BertConfig):
 
         self.sequence_len = sequence_len
         self.chunk_size = chunk_size
+
+
+class ReformerConfig(BertConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        sequence_len=512,
+        chunk_size=16,
+        bits=8,
+        rounds=4,
+        **kwargs
+    ):
+        """Constructs BlockConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            **kwargs
+        )
+
+        self.sequence_len = sequence_len
+        self.chunk_size = chunk_size
+        self.bits = bits
+        self.rounds = rounds

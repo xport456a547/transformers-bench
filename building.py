@@ -13,7 +13,8 @@ MODELS = {
     "maxpooling": (MaxPoolingConfig, MaxPoolingSelfAttention),
     "efficient": (EfficientConfig, EfficientSelfAttention),
     "longformer": (LongformerConfig, LongformerSelfAttention_),
-    "block": (BlockConfig, BlockSelfAttention)
+    "block": (BlockConfig, BlockSelfAttention),
+    "reformer": (ReformerConfig, ReformerSelfAttention)
 }
 
 
