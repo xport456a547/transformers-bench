@@ -11,6 +11,31 @@ from transformers import TextDataset, DataCollatorForLanguageModeling, Trainer
 from transformers import TrainingArguments, HfArgumentParser
 from transformers import RobertaTokenizerFast
 
+class Trainer_(Trainer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def log(self, logs):
+        if self.state.epoch is not None:
+            logs["epoch"] = self.state.epoch
+        else:
+            logs["epoch"] = 0.
+            
+        if "eval_loss" in logs:
+            logs["eval_bpc"] = logs["eval_loss"] / math.log(2)
+        elif "loss" in logs:
+            logs["bpc"] = logs["loss"] / math.log(2)
+
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+        output = {**logs, **{"step": self.state.global_step}}
+
+        # Log everything here
+        if output["step"] % self.args.logging_steps == 0:
+            logging.info(output)
+
+        self.state.log_history.append(output)
+
+
 
 def compute_metrics(pred):
     labels = pred.label_ids
@@ -32,7 +57,7 @@ def compute_metrics(pred):
     acc = accuracy_score(labels, preds)
 
     metrics = {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
-    logging.info(metrics)
+    #logging.info(metrics)
 
     return metrics
 
@@ -77,7 +102,7 @@ def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_on
     )
 
     # https://huggingface.co/transformers/_modules/transformers/trainer.html
-    trainer = Trainer(
+    trainer = Trainer_(
         model=model,
         args=training_args,
         data_collator=data_collator,
@@ -87,8 +112,9 @@ def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_on
     )
 
     metrics = trainer.evaluate()
-    eval_loss = metrics["eval_loss"]
-    logging.info(f"Initial eval bpc: {eval_loss / math.log(2)}")
+    #eval_loss = metrics["eval_loss"]
+    #logging.info(f"Initial eval bpc: {eval_loss / math.log(2)}")
+    logging.info(f"Initial metrics: {metrics}")
 
     if not eval_only:
 
@@ -148,8 +174,6 @@ if __name__ == "__main__":
         os.mkdir(training_args.output_dir)
 
 
-
-
     # TODO add model info in log file name
     log_path = "{0}/{1}_{2}.log".format(training_args.output_dir, os.path.basename(args.model), os.path.basename(args.dataset))
 
@@ -173,9 +197,6 @@ if __name__ == "__main__":
     # args.model must be a dictionary with keys name/
     # TODO delete after substitution
 
-    # from transformers import RobertaForMaskedLM
-    # from modeling import RobertaForMaskedLM
-    # model = RobertaForMaskedLM.from_pretrained('roberta-base')
 
     from building import ModelBuilder
 
