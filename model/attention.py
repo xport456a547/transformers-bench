@@ -5,8 +5,10 @@ import math
 
 from transformers.modeling_longformer import LongformerSelfAttention
 from transformers.modeling_roberta import RobertaSelfAttention
+
 from fast_transformers.attention.reformer_attention import ReformerAttention
 from fast_transformers.masking import FullMask, LengthMask
+
 
 class BaseSelfAttention(nn.Module):
     def init_modules(self, config):
@@ -488,7 +490,6 @@ class BlockSelfAttention(BaseSelfAttention):
         size[0] = size[0] // self.n_chunks
         return x.reshape(*size)
 
-
 class ReformerSelfAttention(BaseSelfAttention):
     """
     Adapted from "Reformer: The Efficient Transformer"
@@ -543,5 +544,4 @@ class ReformerSelfAttention(BaseSelfAttention):
         context_layer = self.reshape_output(context_layer.transpose(1, 2))
 
         return (context_layer,)
-
     

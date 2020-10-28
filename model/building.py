@@ -1,9 +1,9 @@
 import json
 import os
-from attention import *
-from config import *
-from modeling import *
+from model.attention import *
+from model.modeling import *
 import transformers.modeling_roberta
+from model.config import *
 
 MODELS = {
     "roberta": (RobertaConfig, RobertaSelfAttention),

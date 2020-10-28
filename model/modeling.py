@@ -1,5 +1,4 @@
 from transformers.modeling_roberta import *
-from config import *
 
 
 class RobertaForMaskedLM(RobertaPreTrainedModel):
