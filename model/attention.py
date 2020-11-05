@@ -445,9 +445,9 @@ class BlockSelfAttention(BaseSelfAttention):
         output_attentions=False,
     ):
 
-        query_layer = self.transpose_for_scores(hidden_states)
-        key_layer = self.transpose_for_scores(hidden_states)
-        value_layer = self.transpose_for_scores(hidden_states)
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.reshape_chunks(query_layer, dim=-2)
         key_layer = self.reshape_chunks(key_layer, dim=-2)
