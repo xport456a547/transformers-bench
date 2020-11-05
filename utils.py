@@ -51,11 +51,17 @@ def get_args():
     # https://github.com/huggingface/transformers/blob/master/src/transformers/training_args.py
     parser_hf_trainer_args = HfArgumentParser((TrainingArguments,))
     training_args = parser_hf_trainer_args.parse_args_into_dataclasses(
+        args=[],
+        return_remaining_strings=False,
+        look_for_args_file=True,
         args_filename=args.train
     )[0]
 
     parser_hf_dataset_args = HfArgumentParser((DatasetArgs,))
     dataset_args = parser_hf_dataset_args.parse_args_into_dataclasses(
+        args=[],
+        return_remaining_strings=False,
+        look_for_args_file=True,
         args_filename=args.dataset
     )[0]
 
