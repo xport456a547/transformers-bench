@@ -17,6 +17,8 @@ Available models:
 * Block
 * Reformer
 
+See model configuration below
+
 ## Tasks and metrics
 
 Models are compared using MLM.
@@ -33,6 +35,65 @@ Supported datasets:
  * text8 (token-level)
  * wikitext-2 
  * wikitext-103
+
+## Configuration 
+
+### Model configuration 
+
+#### Generic parameters
+
+* `model`: model flag
+    * `roberta`: (RobertaConfig, RobertaSelfAttention),
+    * `kernel`: (KernelConfig, KernelSelfAttention),
+    * `linformer`: (LinformerConfig, LinformerSelfAttention),
+    * `avgpooling`: (AvgPoolingConfig, AvgPoolingSelfAttention),
+    * `maxpooling`: (MaxPoolingConfig, MaxPoolingSelfAttention),
+    * `efficient`: (EfficientConfig, EfficientSelfAttention),
+    * `longformer`: (LongformerConfig, LongformerSelfAttention_),
+    * `block`: (BlockConfig, BlockSelfAttention),
+    * `reformer`: (ReformerConfig, ReformerSelfAttention)
+    
+* `from_pretrained_roberta` true/false
+
+* `num_hidden_layers`: 12,
+* `hidden_size`: 768,
+* `intermediate_size`: 3072,
+* `num_attention_heads`: 12,
+
+* `max_position_embeddings`: 512,
+* `sequence_len`: 512,
+
+* `hidden_dropout_prob`: 0.0,
+* `attention_probs_dropout_prob`: 0.0,
+
+
+#### Model specific parameters 
+
+**Pooling models**
+
+* `kernel` 
+* `stride` 
+
+**Linformer**
+
+* `projection_length`
+* `projection_bias`: false
+
+**Longformer**
+
+* `attention_window`
+
+
+**Reformer**
+
+* `chunk_size`
+* `bits`
+* `rounds`
+
+**Block**
+
+* `chunk_size`
+
 
 ## Dev Tasks
 - Refactoring
@@ -51,3 +112,4 @@ Supported datasets:
 - Evaluation using enwik9 is long (6 minutes)
 - Debug
     - (seb@maccpu usage) uncomment pytorch-fast-transformers dependencies exclusion (model.attention, model.building)
+    - config Roberta https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-config.json

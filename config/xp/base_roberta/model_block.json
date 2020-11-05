@@ -1,8 +1,9 @@
 {
-	"model": "efficient",
+	"model": "block",
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,
-	"sequence_len": 512
-}
+	"sequence_len": 512,
 
+	"chunk_size": 128
+}
