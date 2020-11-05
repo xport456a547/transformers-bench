@@ -1,0 +1,8 @@
+<<<<<<< HEAD
+--train_datapath data/text8_dir/text8.train.raw
+--val_datapath data/text8_dir/text8.valid.raw
+=======
+--name wikitext-103-raw
+--train_datapath data/wikitext-103-raw/wiki.train.raw
+--val_datapath data/wikitext-103-raw/wiki.valid.raw
+>>>>>>> e46c3deb5bf90ccc8a88296d2285f0f86fcba1cb

@@ -1,0 +1,2 @@
+--train_datapath data/enwik8_dir/enwik8.train.raw
+--val_datapath data/enwik8_dir/enwik8.valid.raw

@@ -1,0 +1,2 @@
+--train_datapath data/text8_dir/text8.train.raw
+--val_datapath data/text8_dir/text8.valid.raw
