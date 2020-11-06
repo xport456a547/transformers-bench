@@ -245,24 +245,18 @@ class MaxPoolingSelfAttention(BaseSelfAttention):
     ):
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
-        key_layer = self.key(hidden_states)
-        value_layer = self.value(hidden_states)
+        n, h, t, d = query_layer.size()
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
-            # Mask: (n, 1, 1, t) -> (n, t, 1)
+            key_layer = key_layer + attention_mask.transpose(-1, -2)
+            value_layer = value_layer + attention_mask.transpose(-1, -2)
 
-            attention_mask = attention_mask.transpose(-1, -2).squeeze(1)
-            attention_mask[attention_mask != 0] = 1
-            attention_mask = 1.0 - attention_mask
-            key_layer = (key_layer * attention_mask).transpose(-1, -2)
-            value_layer = (value_layer * attention_mask).transpose(-1, -2)
-
-        key_layer = self.transpose_for_scores(self.pooling(key_layer).transpose(-1, -2))
-        value_layer = self.transpose_for_scores(
-            self.pooling(value_layer).transpose(-1, -2)
-        )
+        key_layer = self.pooling(key_layer.transpose(-1, -2).reshape(-1, d, t)).reshape(n, h, d, -1).transpose(-1, -2)
+        value_layer = self.pooling(value_layer.transpose(-1, -2).reshape(-1, d, t)).reshape(n, h, d, -1).transpose(-1, -2)
 
         attention_scores = query_layer @ key_layer.transpose(-1, -2)
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
@@ -545,3 +539,70 @@ class ReformerSelfAttention(BaseSelfAttention):
 
         return (context_layer,)
     
+
+
+class LocalSelfAttention(BaseSelfAttention):
+    """
+    Local attention with overlapping window
+    Don't support head mask
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.init_modules(config)
+        self.w = config.attention_window[0] // 2
+
+    def chunk(self, x, w):
+        return x.unfold(-2, w*2, w).transpose(-1, -2)
+    
+    def dechunk(self, x, w):
+        n, h, t, d = x.size()
+        return torch.cat([
+            x[:,:,:w], 
+            x[:,:,w:-w].reshape(n, h, -1, 2, w, d).mean(-3).reshape(n, h, -1, d), 
+            x[:,:,-w:]], 
+            dim=-2
+            )
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=False,
+    ):
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        n, h, t, d = query_layer.size()
+
+        query_layer = self.chunk(query_layer, w=self.w)
+        key_layer = self.chunk(key_layer, w=self.w)
+        value_layer = self.chunk(value_layer, w=self.w)
+
+        attention_mask = self.chunk(attention_mask.transpose(-1, -2), w=self.w).transpose(-1, -2)
+
+        attention_scores = query_layer @ key_layer.transpose(-1, -2)
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = attention_probs @ value_layer
+
+        context_layer = self.dechunk(context_layer.reshape(n, h, -1, d), self.w)
+        context_layer = self.reshape_output(context_layer)
+        return (context_layer,)

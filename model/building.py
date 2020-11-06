@@ -14,7 +14,8 @@ MODELS = {
     "efficient": (EfficientConfig, EfficientSelfAttention),
     "longformer": (LongformerConfig, LongformerSelfAttention_),
     "block": (BlockConfig, BlockSelfAttention),
-    "reformer": (ReformerConfig, ReformerSelfAttention)
+    "reformer": (ReformerConfig, ReformerSelfAttention),
+    "local": (LocalConfig, LocalSelfAttention)
 }
 
 
