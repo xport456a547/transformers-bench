@@ -1,2 +1,3 @@
+--name wikitext-2
 --train_datapath data/wikitext-2-raw/wiki.train.raw
 --val_datapath data/wikitext-2-raw/wiki.valid.raw
