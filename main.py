@@ -44,5 +44,9 @@ if __name__ == "__main__":
         from_checkpoint=None,  # Directory to load a checkpoint (created by the Trainer)
         vocab_size=len(tokenizer)
     )
+    model, config = builder.get_model()
 
-    pretrain_and_evaluate(training_args, dataset_args, builder.get_model(), tokenizer, parser_args.eval_only)
+    tokenizer.model_max_length = config.sequence_len
+    tokenizer.init_kwargs['model_max_length'] = config.sequence_len
+
+    pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, parser_args.eval_only)

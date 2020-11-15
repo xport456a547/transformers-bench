@@ -8,14 +8,17 @@ Models are implemented using Huggingface transformers library (redefining the at
 
 Available models:
 * Roberta (baseline)
-* Kernel
-* linformer
+* Kernel 
+* Linformer
+* Cosine
 * Avgpooling
 * Maxpooling
 * Efficient
 * Longformer
 * Block
 * Reformer
+* Local (block based)
+* Local-global (block based)
 
 See model configuration below
 

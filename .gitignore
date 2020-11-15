@@ -7,3 +7,5 @@ tmp/*
 !data/prepare_data.sh
 .idea
 tmp
+_.py
+nohup.out

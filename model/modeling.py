@@ -1,6 +1,5 @@
 from transformers.modeling_roberta import *
 
-
 class RobertaForMaskedLM(RobertaPreTrainedModel):
     authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
     authorized_unexpected_keys = [r"pooler"]

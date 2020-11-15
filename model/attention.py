@@ -9,6 +9,8 @@ from transformers.modeling_roberta import RobertaSelfAttention
 from fast_transformers.attention.reformer_attention import ReformerAttention
 from fast_transformers.masking import FullMask, LengthMask
 
+from model.attention_product import *
+
 
 class BaseSelfAttention(nn.Module):
     def init_modules(self, config):
@@ -43,6 +45,12 @@ class BaseSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         return context_layer.view(*new_context_layer_shape)
 
+    def project_QKV(self, hidden_states):
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        return query_layer, key_layer, value_layer
+
 
 class KernelSelfAttention(BaseSelfAttention):
     """
@@ -57,6 +65,7 @@ class KernelSelfAttention(BaseSelfAttention):
 
         self.init_modules(config)
         self.act = lambda x: F.elu(x) + 1
+        self.attention = KernelAttentionProduct(config, normalize=True)
 
     def forward(
         self,
@@ -66,26 +75,20 @@ class KernelSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         if attention_mask is not None:
             attention_mask = attention_mask.transpose(-1, -2)
             query_layer = query_layer + attention_mask
             key_layer = key_layer + attention_mask
 
-        # Apply dropout here because we dont compute a score matrix
-        query_layer = self.dropout(self.act(query_layer))
-        key_layer = self.dropout(self.act(key_layer))
-
-        # Normalize
-        query_layer = query_layer / (
-            query_layer @ key_layer.sum(-2, keepdim=True).transpose(-1, -2) + 10e-6
-        )
-        context_layer = query_layer @ (key_layer.transpose(-1, -2) @ value_layer)
+        context_layer = self.attention(
+            query_layer=self.act(query_layer), 
+            key_layer=self.act(key_layer), 
+            value_layer=value_layer
+            )
 
         context_layer = self.reshape_output(context_layer)
 
@@ -104,10 +107,12 @@ class LinformerSelfAttention(BaseSelfAttention):
         self.init_modules(config)
         self.E = nn.Linear(
             config.sequence_len, config.projection_length, bias=config.projection_bias
-        )
+            )
         self.F = nn.Linear(
             config.sequence_len, config.projection_length, bias=config.projection_bias
-        )
+            )
+
+        self.attention = BaseAttentionProduct(config)
 
     def forward(
         self,
@@ -117,48 +122,32 @@ class LinformerSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
             # Custom masking for Linformer as we cannot mask properly the projected sequence
             attention_mask = attention_mask.transpose(-1, -2)
-            attention_mask[attention_mask != 0] = 1
-            attention_mask = 1 - attention_mask
+            attention_mask = (attention_mask / 10000) + 1
+            
             query_layer = query_layer * attention_mask
             key_layer = key_layer * attention_mask
 
-        key_layer = self.E(key_layer.transpose(-1, -2))
-        value_layer = self.F(value_layer.transpose(-1, -2)).transpose(-1, -2)
-
-        attention_scores = query_layer @ key_layer
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = attention_probs @ value_layer
+        context_layer = self.attention(
+            query_layer=query_layer, 
+            key_layer=self.E(key_layer.transpose(-1, -2)).transpose(-1, -2), 
+            value_layer=self.F(value_layer.transpose(-1, -2)).transpose(-1, -2), 
+            attention_mask=None
+            )
 
         context_layer = self.reshape_output(context_layer)
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+        outputs = (context_layer,)
         return outputs
 
 
 class AvgPoolingSelfAttention(BaseSelfAttention):
+
     def __init__(self, config):
         """
         Attention using average pooling
@@ -168,6 +157,7 @@ class AvgPoolingSelfAttention(BaseSelfAttention):
 
         self.init_modules(config)
         self.pooling = nn.AvgPool1d(config.kernel_size, config.stride)
+        self.attention = BaseAttentionProduct(config)
 
     def forward(
         self,
@@ -177,11 +167,10 @@ class AvgPoolingSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        pooled_hidden_states = self.pooling(hidden_states.transpose(-1, -2)).transpose(
-            -1, -2
-        )
+        pooled_hidden_states = self.pooling(
+            hidden_states.transpose(-1, -2)).transpose(-1, -2)
 
         query_layer = self.query(hidden_states)
         key_layer = self.key(pooled_hidden_states)
@@ -191,34 +180,17 @@ class AvgPoolingSelfAttention(BaseSelfAttention):
         key_layer = self.transpose_for_scores(key_layer)
         value_layer = self.transpose_for_scores(value_layer)
 
-        attention_scores = query_layer @ key_layer.transpose(-1, -2)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
             # We compute a pooled mask as the score matrix is (seq_len, reduced_seq_len)
             attention_mask = self.pooling(attention_mask.squeeze(-2)).unsqueeze(-2)
             attention_mask[attention_mask != 0] = -10000
 
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = attention_probs @ value_layer
+        context_layer = self.attention(query_layer, key_layer, value_layer, attention_mask)
 
         context_layer = self.reshape_output(context_layer)
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+
+        outputs = (context_layer, )
         return outputs
 
 
@@ -233,6 +205,7 @@ class MaxPoolingSelfAttention(BaseSelfAttention):
 
         self.init_modules(config)
         self.pooling = nn.MaxPool1d(config.kernel_size, config.stride)
+        self.attention = BaseAttentionProduct(config)
 
     def forward(
         self,
@@ -242,11 +215,9 @@ class MaxPoolingSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         n, h, t, d = query_layer.size()
 
@@ -258,26 +229,14 @@ class MaxPoolingSelfAttention(BaseSelfAttention):
         key_layer = self.pooling(key_layer.transpose(-1, -2).reshape(-1, d, t)).reshape(n, h, d, -1).transpose(-1, -2)
         value_layer = self.pooling(value_layer.transpose(-1, -2).reshape(-1, d, t)).reshape(n, h, d, -1).transpose(-1, -2)
 
-        attention_scores = query_layer @ key_layer.transpose(-1, -2)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = attention_probs @ value_layer
+        context_layer = self.attention(
+            query_layer=query_layer, 
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            )
 
         context_layer = self.reshape_output(context_layer)
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+        outputs = (context_layer, )
         return outputs
 
 
@@ -299,20 +258,13 @@ class CosineSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-
-        # Apply dropout here because we dont compute a score matrix
-        query_layer = self.dropout(query_layer)
-        key_layer = self.dropout(key_layer)
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         if attention_mask is not None:
             attention_mask = attention_mask.transpose(-1, -2)
-            attention_mask[attention_mask != 0] = 1
-            attention_mask = 1 - attention_mask
+            attention_mask = (attention_mask / 10000) + 1
 
             query_layer = query_layer * attention_mask
             key_layer = key_layer * attention_mask
@@ -321,22 +273,22 @@ class CosineSelfAttention(BaseSelfAttention):
         query_layer = query_layer / (query_layer.norm(dim=-1, keepdim=True) + 10e-6)
         key_layer = key_layer / (key_layer.norm(dim=-1, keepdim=True) + 10e-6)
 
-        # Compute unormalized output
-        context_layer = query_layer @ (
-            key_layer.transpose(-1, -2) @ value_layer
-        ) + value_layer.sum(dim=-2, keepdim=True)
+        # Compute unormalized output with dropout
+        context_layer = self.dropout(key_layer.transpose(-1, -2) @ value_layer)
+        context_layer = query_layer @ context_layer + value_layer.sum(dim=-2, keepdim=True)
 
         # Normalisation
         normalization = (
             query_layer @ key_layer.sum(-2, keepdim=True).transpose(-1, -2) + 10e-6
         )
+
         if attention_mask is not None:
             normalization = normalization + attention_mask.sum(dim=-2, keepdim=True)
         else:
             normalization = normalization + context_layer.size(-2)
+            
         context_layer = context_layer / normalization
-
-        context_layer = self.reshape_output(context_layer)
+        
         return (context_layer,)
 
 
@@ -351,6 +303,7 @@ class EfficientSelfAttention(BaseSelfAttention):
     def __init__(self, config):
         super().__init__()
         self.init_modules(config)
+        self.attention = KernelAttentionProduct(config, normalize=False)
 
     def forward(
         self,
@@ -360,26 +313,20 @@ class EfficientSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-
-        # Apply dropout here because we dont compute a score matrix
-        query_layer = self.dropout(query_layer)
-        key_layer = self.dropout(key_layer)
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         if attention_mask is not None:
             attention_mask = attention_mask.transpose(-1, -2)
             query_layer = query_layer + attention_mask
             key_layer = key_layer + attention_mask
 
-        query_layer = torch.softmax(query_layer, dim=-2)
-        key_layer = torch.softmax(key_layer, dim=-2)
-
-        # Compute normalized output
-        context_layer = query_layer @ (key_layer.transpose(-1, -2) @ value_layer)
+        context_layer = self.attention(
+            query_layer=torch.softmax(query_layer, dim=-2), 
+            key_layer=torch.softmax(key_layer, dim=-2), 
+            value_layer=value_layer
+            )
 
         context_layer = self.reshape_output(context_layer)
         return (context_layer,)
@@ -404,14 +351,28 @@ class LongformerSelfAttention_(LongformerSelfAttention):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=False,
-    ):
+        ):
 
-        # Call parent forward pass which doesnt support **kwargs
-        return super().forward(
+        # Fix HuggingFace dogshit arguments that change every release
+        # Call parent forward pass to handle longformer
+        attention_mask = attention_mask.squeeze(1).squeeze(1)
+        is_index_masked = attention_mask.bool()
+
+        # Manually set <s> as global
+        attention_mask[:, 0] = 10000
+
+        is_index_global_attn = torch.zeros_like(attention_mask)
+        is_index_global_attn[:, 0] = 1
+
+        output = super().forward(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            is_index_masked=is_index_masked,
+            is_index_global_attn=is_index_global_attn.bool(),
+            is_global_attn=True
         )
+        
+        return (output[0], )
 
 
 class BlockSelfAttention(BaseSelfAttention):
@@ -424,10 +385,7 @@ class BlockSelfAttention(BaseSelfAttention):
         super().__init__()
 
         self.init_modules(config)
-        self.chunk_size = config.chunk_size
-
-        assert config.sequence_len % self.chunk_size == 0
-        self.n_chunks = config.sequence_len // self.chunk_size
+        self.attention = BlockLocalAttentionProduct(config, overlap=False)
 
     def forward(
         self,
@@ -437,52 +395,21 @@ class BlockSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
-        query_layer = self.reshape_chunks(query_layer, dim=-2)
-        key_layer = self.reshape_chunks(key_layer, dim=-2)
-        value_layer = self.reshape_chunks(value_layer, dim=-2)
-        attention_mask = self.reshape_chunks(attention_mask, dim=-1)
+        context_layer = self.attention(
+            query_layer=query_layer, 
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
+            )
 
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = query_layer @ key_layer.transpose(-1, -2)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = attention_probs @ value_layer
-
-        context_layer = self.reverse_chunks(context_layer, dim=-2)
         context_layer = self.reshape_output(context_layer)
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+        outputs = (context_layer, )
         return outputs
 
-    def reshape_chunks(self, x, dim):
-        size = list(x.size())
-        size[dim] = size[dim] // self.n_chunks
-        size[0] *= self.n_chunks
-        return x.reshape(*size)
-
-    def reverse_chunks(self, x, dim):
-        size = list(x.size())
-        size[dim] *= self.n_chunks
-        size[0] = size[0] // self.n_chunks
-        return x.reshape(*size)
 
 class ReformerSelfAttention(BaseSelfAttention):
     """
@@ -513,13 +440,13 @@ class ReformerSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
-        n, t, d = hidden_states.size()
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states)).transpose(1, 2)
-        key_layer = self.transpose_for_scores(self.key(hidden_states)).transpose(1, 2)
-        value_layer = self.transpose_for_scores(self.value(hidden_states)).transpose(1, 2)
+        query_layer = query_layer.transpose(1, 2)
+        key_layer = key_layer.transpose(1, 2)
+        value_layer = value_layer.transpose(1, 2)
 
         # Change mask behavior to be compatible with https://github.com/idiap/fast-transformers
         attention_mask = (attention_mask.squeeze(1).squeeze(1) + 10000) / 10000
@@ -540,29 +467,88 @@ class ReformerSelfAttention(BaseSelfAttention):
         return (context_layer,)
     
 
-
 class LocalSelfAttention(BaseSelfAttention):
     """
-    Local attention with overlapping window
-    Don't support head mask
+    Compute local attention with overlapping blocs
     """
 
     def __init__(self, config):
         super().__init__()
-        self.init_modules(config)
-        self.w = config.attention_window[0] // 2
 
-    def chunk(self, x, w):
-        return x.unfold(-2, w*2, w).transpose(-1, -2)
-    
-    def dechunk(self, x, w):
-        n, h, t, d = x.size()
-        return torch.cat([
-            x[:,:,:w], 
-            x[:,:,w:-w].reshape(n, h, -1, 2, w, d).mean(-3).reshape(n, h, -1, d), 
-            x[:,:,-w:]], 
-            dim=-2
+        self.init_modules(config)
+        self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
+        
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+    ):
+
+        n, t, d = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        n, h, t, d = query_layer.size()
+        
+        # Compute block local attention
+        context_layer = self.local_attention(
+            query_layer=query_layer, 
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
             )
+
+        context_layer = self.reshape_output(context_layer)
+
+        return (context_layer,)
+
+
+class LocalGlobalSelfAttention(BaseSelfAttention):
+    """
+    Compute local attention with overlapping blocs
+    Use global attention for tokens with highest norm
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.topk = config.topk
+        self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
+        self.global_attention = BaseAttentionProduct(config)
+
+    def get_global_index(self, x, mask):
+        
+        n, h, t, d = x.size()
+        if mask is not None:
+            mask = ~mask.transpose(-1, -2).bool()
+            x = x * mask
+        
+        # get <s> and </s>
+        bos = torch.zeros(n, h, 1, 1, device=x.device)
+
+        if mask is not None:
+            eos = (mask.sum(-2, keepdim=True) - 1).expand(n, h, 1, 1)
+            del mask
+        else:
+            eos = torch.zeros_like(bos)
+            eos[:, :, 0, :] = t - 1
+
+        # Get topk tokens with highest norm head wise
+        # Reserve 2 tokens for <s> and </s>
+        norm = torch.norm(x, dim=-1, keepdim=True)
+        idx = torch.topk(norm, k=self.topk-2, dim=-2)[1].expand(n, h, -1, 1)
+        del norm
+
+        # Cat selected tokens
+        idx = torch.cat([bos, idx, eos], dim=-2).long()
+
+        return idx
 
     def forward(
         self,
@@ -572,37 +558,68 @@ class LocalSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-        output_hidden_states=False,
-        return_dict=False,
-    ):
+        ):
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         n, h, t, d = query_layer.size()
+        
+        # Compute block local attention
+        context_layer = self.local_attention(
+            query_layer=query_layer, 
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
+            )
 
-        query_layer = self.chunk(query_layer, w=self.w)
-        key_layer = self.chunk(key_layer, w=self.w)
-        value_layer = self.chunk(value_layer, w=self.w)
+        # Get global indexes
+        idx = self.get_global_index(query_layer, attention_mask).expand(n, h, -1, d)
 
-        attention_mask = self.chunk(attention_mask.transpose(-1, -2), w=self.w).transpose(-1, -2)
+        # Compute full attention on global indexes
+        global_context = self.global_attention(
+            query_layer=query_layer.gather(dim=-2, index=idx),
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
+            )
+        
+        # Replace global idx with full attention
+        context_layer = torch.scatter(context_layer, dim=-2, index=idx.expand(n, h, -1, d), src=global_context)
 
-        attention_scores = query_layer @ key_layer.transpose(-1, -2)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = attention_probs @ value_layer
-
-        context_layer = self.dechunk(context_layer.reshape(n, h, -1, d), self.w)
         context_layer = self.reshape_output(context_layer)
+
         return (context_layer,)
+
+
+class KeopsSelfAttention(BaseSelfAttention):
+    """
+    Keops attention for full attention
+    Don't support head mask
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.attention = KeopsAttentionProduct(config)
+        
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        ):
+
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+
+        context_layer = self.attention(query_layer, key_layer, value_layer, attention_mask)
+        context_layer = self.reshape_output(context_layer)
+
+        return (context_layer,)
+
+
+
+
