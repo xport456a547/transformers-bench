@@ -20,17 +20,19 @@ Models are implemented using Huggingface transformers library (redefining the at
 
 Available models:
 * Roberta (baseline)
-* Kernel 
-* Linformer
+* Kernel ([see](https://arxiv.org/abs/2006.16236))
+* Linformer ([see](https://arxiv.org/abs/2006.04768))
 * Cosine
 * Avgpooling
 * Maxpooling
-* Efficient
-* Longformer
-* Block
-* Reformer
-* Local (block based)
-* Local-global (block based)
+* Efficient ([see](https://arxiv.org/abs/1812.01243))
+* Longformer ([see](https://arxiv.org/abs/2004.05150), based on HF)
+* Local (attention window attention, based on HF)
+* Block (non overlapping blocks attention)
+* Block-Local (overlapping blocks to approximate local attn)
+* Block-global (Block-Local + global connection with high norm tokens)
+* LSH (use HF implementation of [Reformer](https://arxiv.org/abs/2001.04451))
+* LSH-FT (use pytorch-torch-transformers implementation: optional)
 
 See model configuration below
 
@@ -58,15 +60,21 @@ Supported datasets:
 #### Generic parameters
 
 * `model`: model flag
-    * `roberta`: (RobertaConfig, RobertaSelfAttention),
-    * `kernel`: (KernelConfig, KernelSelfAttention),
-    * `linformer`: (LinformerConfig, LinformerSelfAttention),
-    * `avgpooling`: (AvgPoolingConfig, AvgPoolingSelfAttention),
-    * `maxpooling`: (MaxPoolingConfig, MaxPoolingSelfAttention),
-    * `efficient`: (EfficientConfig, EfficientSelfAttention),
-    * `longformer`: (LongformerConfig, LongformerSelfAttention_),
-    * `block`: (BlockConfig, BlockSelfAttention),
-    * `reformer`: (ReformerConfig, ReformerSelfAttention)
+    * `roberta`: (RobertaConfig, RobertaSelfAttention)
+    * `kernel`: (KernelConfig, KernelSelfAttention)
+    * `linformer`: (LinformerConfig, LinformerSelfAttention)
+    * `avgpooling`: (AvgPoolingConfig, AvgPoolingSelfAttention)
+    * `maxpooling`: (MaxPoolingConfig, MaxPoolingSelfAttention)
+    * `cosine`: (CosineConfig, CosineSelfAttention)
+    * `efficient`: (EfficientConfig, EfficientSelfAttention)
+    * `longformer`: (LongformerConfig, LongformerSelfAttention_)
+    * `local`: (LocalConfig, LocalSelfAttention)
+    * `block`: (BlockConfig, BlockSelfAttention)
+    * `block-local`: (BlockLocalConfig, BlockLocalSelfAttention)
+    * `block-global`: (BlockGlobalConfig, BlockGlobalSelfAttention)
+    * `lsh`: (LSHConfig, LSHSelfAttention)
+    * `lsh-ft`: (LSHFTConfig, LSHFTSelfAttention)
+    
     
 * `from_pretrained_roberta` true/false
 

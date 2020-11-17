@@ -1,9 +1,10 @@
 {
-	"model": "local",
+	"model": "block-global",
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,
 	"sequence_len": 512,
 
-	"local_attn_chunk_length": 128
+	"chunk_size": 128,
+	"topk": 128
 }

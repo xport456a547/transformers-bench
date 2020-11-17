@@ -7,7 +7,7 @@ from model.config import *
 import logging
 
 MODELS = {
-    "roberta": (RobertaConfig, RobertaSelfAttention),
+    "roberta": (RobertaConfig, RobertaSelfAttention),           
     "kernel": (KernelConfig, KernelSelfAttention),
     "linformer": (LinformerConfig, LinformerSelfAttention),
     "avgpooling": (AvgPoolingConfig, AvgPoolingSelfAttention),
@@ -15,11 +15,13 @@ MODELS = {
     "cosine": (CosineConfig, CosineSelfAttention),
     "efficient": (EfficientConfig, EfficientSelfAttention),
     "longformer": (LongformerConfig, LongformerSelfAttention_),
-    "block": (BlockConfig, BlockSelfAttention),
-    "reformer": (ReformerConfig, ReformerSelfAttention),
     "local": (LocalConfig, LocalSelfAttention),
-    "local-global": (LocalGlobalConfig, LocalGlobalSelfAttention),
-    "keops": (KeopsConfig, KeopsSelfAttention)
+    "block": (BlockConfig, BlockSelfAttention),
+    "block-local": (BlockLocalConfig, BlockLocalSelfAttention),
+    "block-global": (BlockGlobalConfig, BlockGlobalSelfAttention),
+    "lsh": (LSHConfig, LSHSelfAttention),        #huggingface  LSH
+    "lsh-ft": (LSHFTConfig, LSHFTSelfAttention), #pytorch-fast-transformer LSH
+    "keops": (KeopsConfig, KeopsSelfAttention),
 }
 
 

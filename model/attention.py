@@ -5,9 +5,15 @@ import math
 
 from transformers.modeling_longformer import LongformerSelfAttention
 from transformers.modeling_roberta import RobertaSelfAttention
+from transformers.modeling_reformer import LSHSelfAttention as ReformerLSHSelfAttention
+from transformers.modeling_reformer import LocalSelfAttention as ReformerLocalSelfAttention
 
-from fast_transformers.attention.reformer_attention import ReformerAttention
-from fast_transformers.masking import FullMask, LengthMask
+try:
+    from fast_transformers.attention.reformer_attention import ReformerAttention
+    from fast_transformers.masking import FullMask, LengthMask
+except:
+    import logging
+    logging.info("pytorch-fast-transformers is not installed")
 
 from model.attention_product import *
 
@@ -336,6 +342,8 @@ class LongformerSelfAttention_(LongformerSelfAttention):
     """
     Modified module to be compatible with Roberta
     We use the same attention_window for all layers
+    See: "Longformer: The Long-Document Transformer"
+    https://arxiv.org/abs/2004.05150
     """
 
     def __init__(self, config):
@@ -375,6 +383,41 @@ class LongformerSelfAttention_(LongformerSelfAttention):
         return (output[0], )
 
 
+class LocalSelfAttention(ReformerLocalSelfAttention):
+    """
+    Compute local attention with a given window size
+    Based on HuggingFace Reformer code
+    """
+    def __init__(self, config):
+        super().__init__(config=config)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=False
+        ):
+
+        attention_mask = attention_mask.squeeze(1).squeeze(1)
+        attention_mask = (attention_mask / 10000) + 1
+
+        context_layer = super().forward(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            past_buckets_states=None,
+            use_cache=False,
+            output_attentions=False,
+            )
+
+        return (context_layer[0], )
+
+
 class BlockSelfAttention(BaseSelfAttention):
     """
     Block attention for local attention
@@ -411,65 +454,9 @@ class BlockSelfAttention(BaseSelfAttention):
         return outputs
 
 
-class ReformerSelfAttention(BaseSelfAttention):
+class BlockLocalSelfAttention(BaseSelfAttention):
     """
-    Adapted from "Reformer: The Efficient Transformer"
-    https://arxiv.org/abs/2001.04451
-
-    Use https://github.com/idiap/fast-transformers/blob/master/fast_transformers/attention/reformer_attention.py
-    Can't return attention_probs
-    Doesn't support headmask
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        self.init_modules(config)
-        self.reformer = ReformerAttention(
-            chunk_size=config.chunk_size, 
-            bits=config.bits, 
-            rounds=config.rounds, 
-            attention_dropout=config.hidden_dropout_prob
-            )
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        output_attentions=False,
-        ):
-
-        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
-
-        query_layer = query_layer.transpose(1, 2)
-        key_layer = key_layer.transpose(1, 2)
-        value_layer = value_layer.transpose(1, 2)
-
-        # Change mask behavior to be compatible with https://github.com/idiap/fast-transformers
-        attention_mask = (attention_mask.squeeze(1).squeeze(1) + 10000) / 10000
-        attention_mask = FullMask(mask=attention_mask.bool())
-        attention_length = LengthMask(attention_mask.lengths, max_len=t)
-
-        context_layer = self.reformer(
-            queries=query_layer, 
-            keys=key_layer, 
-            values=value_layer, 
-            attn_mask=attention_mask, 
-            query_lengths=attention_length, 
-            key_lengths=attention_length
-            )
-
-        context_layer = self.reshape_output(context_layer.transpose(1, 2))
-
-        return (context_layer,)
-    
-
-class LocalSelfAttention(BaseSelfAttention):
-    """
-    Compute local attention with overlapping blocs
+    Compute local attention with overlapping blocks
     """
 
     def __init__(self, config):
@@ -509,7 +496,7 @@ class LocalSelfAttention(BaseSelfAttention):
         return (context_layer,)
 
 
-class LocalGlobalSelfAttention(BaseSelfAttention):
+class BlockGlobalSelfAttention(BaseSelfAttention):
     """
     Compute local attention with overlapping blocs
     Use global attention for tokens with highest norm
@@ -590,6 +577,99 @@ class LocalGlobalSelfAttention(BaseSelfAttention):
         return (context_layer,)
 
 
+class LSHSelfAttention(ReformerLSHSelfAttention):
+
+    def __init__(self, config):
+        super().__init__(config=config)
+        self.query = nn.Linear(config.hidden_size, config.hidden_size)
+        self.query_key = self.query
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=False
+        ):
+
+        attention_mask = attention_mask.squeeze(1).squeeze(1)
+        attention_mask = (attention_mask / 10000) + 1
+
+        context_layer = super().forward(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            num_hashes=self.num_hashes,
+            buckets=None,
+            past_buckets_states=None,
+            use_cache=False,
+            output_attentions=False,
+            )
+
+        #print(type(context_layer), len(context_layer))
+        return (context_layer[0], )
+
+
+class LSHFTSelfAttention(BaseSelfAttention):
+    """
+    Adapted from "Reformer: The Efficient Transformer"
+    https://arxiv.org/abs/2001.04451
+
+    Use https://github.com/idiap/fast-transformers/blob/master/fast_transformers/attention/reformer_attention.py
+    Can't return attention_probs
+    Doesn't support headmask
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.reformer = ReformerAttention(
+            chunk_size=config.chunk_size, 
+            bits=config.bits, 
+            rounds=config.rounds, 
+            attention_dropout=config.hidden_dropout_prob
+            )
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        ):
+
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+
+        query_layer = query_layer.transpose(1, 2)
+        key_layer = key_layer.transpose(1, 2)
+        value_layer = value_layer.transpose(1, 2)
+
+        # Change mask behavior to be compatible with https://github.com/idiap/fast-transformers
+        attention_mask = (attention_mask.squeeze(1).squeeze(1) + 10000) / 10000
+        attention_mask = FullMask(mask=attention_mask.bool())
+        attention_length = LengthMask(attention_mask.lengths, max_len=t)
+
+        context_layer = self.reformer(
+            queries=query_layer, 
+            keys=key_layer, 
+            values=value_layer, 
+            attn_mask=attention_mask, 
+            query_lengths=attention_length, 
+            key_lengths=attention_length
+            )
+
+        context_layer = self.reshape_output(context_layer.transpose(1, 2))
+
+        return (context_layer,)
+    
+
 class KeopsSelfAttention(BaseSelfAttention):
     """
     Keops attention for full attention
@@ -618,7 +698,4 @@ class KeopsSelfAttention(BaseSelfAttention):
         context_layer = self.reshape_output(context_layer)
 
         return (context_layer,)
-
-
-
 

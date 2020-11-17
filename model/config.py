@@ -142,6 +142,39 @@ class LongformerConfig(BertConfig):
         self.attention_window = [attention_window]
 
 
+class LocalConfig(BertConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        local_attn_chunk_length=128,
+        local_num_chunks_before=1,
+        local_num_chunks_after=0,
+        is_decoder=False,
+        **kwargs
+        ):
+        """Constructs LocalConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            **kwargs
+        )
+
+        self.local_attn_chunk_length = local_attn_chunk_length
+        self.local_num_chunks_before = local_num_chunks_before
+        self.local_num_chunks_after = local_num_chunks_after
+        self.is_decoder = is_decoder
+        self.local_attention_probs_dropout_prob = self.attention_probs_dropout_prob
+        self.attention_head_size = self.hidden_size // self.num_attention_heads
+  
+
 class BlockConfig(BertConfig):
 
     model_type = "roberta"
@@ -169,7 +202,100 @@ class BlockConfig(BertConfig):
         self.chunk_size = chunk_size
 
 
-class ReformerConfig(BertConfig):
+class BlockLocalConfig(BertConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        attention_window=128,
+        **kwargs
+        ):
+        """Constructs BlockLocalConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            **kwargs
+            )
+
+        # We keep the same window for all layers
+        self.attention_window = [attention_window]
+
+
+class BlockGlobalConfig(BertConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        attention_window=128,
+        topk=128,
+        **kwargs
+        ):
+        """Constructs BlockGlobalConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            **kwargs
+            )
+
+        # We keep the same window for all layers
+        self.attention_window = [attention_window]
+        self.topk = topk
+
+
+class LSHConfig(BertConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        lsh_attn_chunk_length=128,
+        num_hashes=4,
+        num_buckets=128,
+        lsh_num_chunks_before=1,
+        lsh_num_chunks_after=0,
+        hash_seed=None,
+        is_decoder=False,
+        **kwargs
+        ):
+        """Constructs LSHConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            **kwargs
+        )
+
+        self.lsh_attn_chunk_length = lsh_attn_chunk_length
+        self.num_hashes = num_hashes
+        self.num_buckets = num_buckets
+        self.lsh_num_chunks_before = lsh_num_chunks_before
+        self.lsh_num_chunks_after = lsh_num_chunks_after
+        self.hash_seed = hash_seed
+        self.is_decoder = is_decoder
+        self.lsh_attention_probs_dropout_prob = self.attention_probs_dropout_prob
+        self.attention_head_size = self.hidden_size // self.num_attention_heads
+
+
+class LSHFTConfig(BertConfig):
 
     model_type = "roberta"
 
@@ -185,7 +311,7 @@ class ReformerConfig(BertConfig):
         rounds=4,
         **kwargs
             ):
-        """Constructs BlockConfig."""
+        """Constructs LSHFTConfig."""
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -198,60 +324,6 @@ class ReformerConfig(BertConfig):
         self.chunk_size = chunk_size
         self.bits = bits
         self.rounds = rounds
-
-
-class LocalConfig(BertConfig):
-
-    model_type = "roberta"
-
-    def __init__(
-        self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
-        attention_window=128,
-        **kwargs
-        ):
-        """Constructs LocalConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
-
-        # We keep the same window for all layers
-        self.attention_window = [attention_window]
-
-
-class LocalGlobalConfig(BertConfig):
-
-    model_type = "roberta"
-
-    def __init__(
-        self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
-        attention_window=128,
-        topk=128,
-        **kwargs
-        ):
-        """Constructs LocalGlobalConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
-
-        # We keep the same window for all layers
-        self.attention_window = [attention_window]
-        self.topk = topk
 
 
 class KeopsConfig(BertConfig):
@@ -274,3 +346,6 @@ class KeopsConfig(BertConfig):
             type_vocab_size=type_vocab_size,
             **kwargs
         )
+
+
+      

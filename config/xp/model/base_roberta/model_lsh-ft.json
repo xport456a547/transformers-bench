@@ -1,5 +1,5 @@
 {
-	"model": "reformer",
+	"model": "lsh-ft",
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,
