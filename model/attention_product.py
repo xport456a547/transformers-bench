@@ -79,29 +79,21 @@ class KeopsAttentionProduct(nn.Module):
         
         # Expect (..., t, d) shape for query, key, value
         # Expect (..., t) for mask (default: (n, 1, 1, t))
-
         reduction_dim = len(query_layer.size()) - 1
 
         # Compute dropout here as it cannot be done on the score matrix
         query_layer = self.dropout(query_layer)
         key_layer = self.dropout(key_layer)
 
-        q = LazyTensor(query_layer.unsqueeze(-2) / math.sqrt(query_layer.size()[-1])) # (..., t, 1, d)
-        k = LazyTensor(key_layer.unsqueeze(-3))  # (..., 1, t, d)
-        v = LazyTensor(value_layer.unsqueeze(-3))  # (..., 1, t, d)
+        q = LazyTensor( query_layer.unsqueeze(-2).contiguous() / math.sqrt(query_layer.shape[-1]) )
+        k = LazyTensor( key_layer.unsqueeze(-3).contiguous() )
+        v = LazyTensor( value_layer.unsqueeze(-3).contiguous() )
 
         if attention_mask is not None:
-            mask = LazyTensor(attention_mask.unsqueeze(-1)) # (..., 1, t, 1)
-            # We can now perform large-scale computations, without memory overflows:
-            scores = ((q * k).sum(dim=-1) + mask).exp() 
-        else:
-            scores = (q * k).sum(dim=-1).exp() 
+            mask = LazyTensor( attention_mask.unsqueeze(-1) )
+            return ((q*k).sum(dim=-1) + mask).sumsoftmaxweight(v, dim=reduction_dim)
 
-        normalizer = scores.sum(reduction_dim) 
-        scores = scores / normalizer
-        context_layer = (scores * v).sum(dim=reduction_dim)
-
-        return context_layer
+        return (q*k).sum(dim=-1).sumsoftmaxweight(v, dim=reduction_dim)
 
 
 class BlockLocalAttentionProduct(nn.Module):

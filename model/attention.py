@@ -561,7 +561,6 @@ class LocalGlobalSelfAttention(BaseSelfAttention):
         ):
 
         query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
-
         n, h, t, d = query_layer.size()
         
         # Compute block local attention

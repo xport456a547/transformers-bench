@@ -2,6 +2,18 @@
 
 Transformers-bench aims at comparing several fast transformer models in an NLP setting.
 
+# Dependies
+* Pytorch >= 1.5.0 (may work with an older version)
+* Transformers >= 3.5.0 
+
+### Optional dependencies:
+* [pykeops](https://github.com/getkeops/keops) (requires cmake and gcc/g++ == 7.x to be compatible with cuda>=10.0)
+* [pytorch-fast-transformer](https://github.com/idiap/fast-transformers) (may be removed in the future)
+```
+pip install pykeops[devtools]
+pip install pytorch-fast-transformers
+```
+
 ## Supported models
 
 Models are implemented using Huggingface transformers library (redefining the attention mechanism). 
