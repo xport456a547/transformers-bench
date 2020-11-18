@@ -89,7 +89,7 @@ class KernelSelfAttention(BaseSelfAttention):
             attention_mask = attention_mask.transpose(-1, -2)
             query_layer = query_layer + attention_mask
             key_layer = key_layer + attention_mask
-
+    
         context_layer = self.attention(
             query_layer=self.act(query_layer), 
             key_layer=self.act(key_layer), 
@@ -294,7 +294,7 @@ class CosineSelfAttention(BaseSelfAttention):
             normalization = normalization + context_layer.size(-2)
             
         context_layer = context_layer / normalization
-        
+        context_layer = self.reshape_output(context_layer)
         return (context_layer,)
 
 
@@ -583,6 +583,8 @@ class LSHSelfAttention(ReformerLSHSelfAttention):
         super().__init__(config=config)
         self.query = nn.Linear(config.hidden_size, config.hidden_size)
         self.query_key = self.query
+        
+        self.config = config
 
     def forward(
         self,
