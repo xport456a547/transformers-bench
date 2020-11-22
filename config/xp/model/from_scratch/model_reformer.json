@@ -1,0 +1,11 @@
+{
+	"model": "reformer",
+	"from_pretrained_roberta": true,
+
+	"max_position_embeddings": 512,
+	"sequence_len": 512,
+
+	"chunk_size": 32,
+	"bits": 8,
+	"rounds": 4
+}
