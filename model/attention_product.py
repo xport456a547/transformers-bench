@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+from numpy import prod
 
 try:
     from pykeops.torch import LazyTensor
@@ -70,37 +71,78 @@ class KeopsAttentionProduct(nn.Module):
     Keops attention for full attention and efficient attention with low memory print
     Don't support head mask
     """
-    def __init__(self, config):
+    def __init__(self, config, window=None):
 
         super().__init__()
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.local = True if window is not None else False
+
+        self.ranges = None
+        self.window = window
+        self.offset = window // 2 if window is not None else None
+
+        self.num_attention_heads = config.num_attention_heads
+
+    def set_ranges(self, sizes, device):
+        t, d = sizes[-2:]
+        batch = prod(sizes[:-1])
+
+        if self.ranges is None or self.ranges[0].shape[0] != batch:
+
+            indices_i = torch.arange(batch).int().to(device)
+            ranges_i = torch.cat([indices_i.unsqueeze(-1), indices_i.unsqueeze(-1) + 1], dim=-1)
+            ranges_i = torch.clamp(ranges_i, min=0, max=batch)
+
+            indices_j = torch.arange(-self.offset, -self.offset+t).int().to(device)
+            ranges_j = torch.cat([indices_j.unsqueeze(-1), (indices_j + self.window).unsqueeze(-1)], dim=-1)
+            ranges_j = torch.clamp(ranges_j, min=0, max=t)
+            ranges_j = torch.cat([ranges_j+i*t for i in range(batch//t)], dim=0)
+
+            self.ranges = (ranges_i, indices_i + 1, ranges_j)*2
         
     def forward(self, query_layer, key_layer, value_layer, attention_mask=None):
         
         # Expect (..., t, d) shape for query, key, value
         # Expect (..., t) for mask (default: (n, 1, 1, t))
+        d = query_layer.shape[-1]
+        t = query_layer.shape[-2]
+        sizes = query_layer.size()
+
+        if self.local:
+            query_layer = query_layer.reshape(-1, d)
+            key_layer = key_layer.reshape(-1, d)
+            value_layer = value_layer.reshape(-1, d)
+            if attention_mask is not None:
+                attention_mask = attention_mask.expand(*sizes[:-2], 1, -1).reshape(1, -1)
+
         reduction_dim = len(query_layer.size()) - 1
 
         # Compute dropout here as it cannot be done on the score matrix
         query_layer = self.dropout(query_layer)
         key_layer = self.dropout(key_layer)
 
-        q = LazyTensor( query_layer.unsqueeze(-2).contiguous() / math.sqrt(query_layer.shape[-1]) )
+        q = LazyTensor( query_layer.unsqueeze(-2).contiguous() / math.sqrt(d) )
         k = LazyTensor( key_layer.unsqueeze(-3).contiguous() )
         v = LazyTensor( value_layer.unsqueeze(-3).contiguous() )
 
+        attention_scores = (q | k)
+
         if attention_mask is not None:
             mask = LazyTensor( attention_mask.unsqueeze(-1) )
-            return ((q*k).sum(dim=-1) + mask).sumsoftmaxweight(v, dim=reduction_dim)
+            attention_scores = attention_scores + mask
 
-        return (q*k).sum(dim=-1).sumsoftmaxweight(v, dim=reduction_dim)
+        if self.local:
+            self.set_ranges(sizes, query_layer.device)
+            attention_scores.ranges = self.ranges
+
+        return attention_scores.sumsoftmaxweight(v, dim=reduction_dim).reshape(*sizes)
 
 
 class BlockLocalAttentionProduct(nn.Module):
 
     def __init__(self, config, overlap=False):
         """
-        Compute bloc or overlapping blocs attention products
+        Compute block or overlapping blocks attention products
         """
         super().__init__()
  
@@ -174,4 +216,3 @@ class BlockLocalAttentionProduct(nn.Module):
 
     def dechunk(self, x, initial_shape):
         return x.reshape(*initial_shape)
-

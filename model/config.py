@@ -285,7 +285,6 @@ class LSHConfig(BertConfig):
             **kwargs
         )
 
-
         self.lsh_attn_chunk_length = lsh_attn_chunk_length
         self.num_hashes = num_hashes
         self.lsh_num_chunks_before = lsh_num_chunks_before
@@ -298,9 +297,9 @@ class LSHConfig(BertConfig):
 
         self.num_buckets = num_buckets
         if self.num_buckets <= 0:
-            self.num_buckets = self.set_num_buckets()
+            self.num_buckets = self.get_num_buckets()
 
-    def set_num_buckets(self):
+    def get_num_buckets(self):
         # `num_buckets` should be set to 2 * sequence_length // chunk_length as recommended in paper
         num_buckets_pow_2 = (2 * (self.sequence_len // self.lsh_attn_chunk_length)).bit_length() - 1
         # make sure buckets are power of 2
@@ -315,6 +314,7 @@ class LSHConfig(BertConfig):
             num_buckets = [2 ** (num_buckets_pow_2 // 2), 2 ** (num_buckets_pow_2 - num_buckets_pow_2 // 2)]
 
         return num_buckets
+
 
 class LSHFTConfig(BertConfig):
 

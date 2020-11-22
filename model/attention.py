@@ -19,6 +19,7 @@ from model.attention_product import *
 
 
 class BaseSelfAttention(nn.Module):
+    
     def init_modules(self, config):
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
             config, "embedding_size"
@@ -473,7 +474,7 @@ class BlockLocalSelfAttention(BaseSelfAttention):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
-    ):
+        ):
 
         n, t, d = hidden_states.size()
 
@@ -583,8 +584,6 @@ class LSHSelfAttention(ReformerLSHSelfAttention):
         super().__init__(config=config)
         self.query = nn.Linear(config.hidden_size, config.hidden_size)
         self.query_key = self.query
-        
-        self.config = config
 
     def forward(
         self,
@@ -612,7 +611,6 @@ class LSHSelfAttention(ReformerLSHSelfAttention):
             output_attentions=False,
             )
 
-        #print(type(context_layer), len(context_layer))
         return (context_layer[0], )
 
 
@@ -700,4 +698,3 @@ class KeopsSelfAttention(BaseSelfAttention):
         context_layer = self.reshape_output(context_layer)
 
         return (context_layer,)
-
