@@ -698,3 +698,33 @@ class KeopsSelfAttention(BaseSelfAttention):
         context_layer = self.reshape_output(context_layer)
 
         return (context_layer,)
+
+
+class KeopsSelfAttention2(BaseSelfAttention):
+    """
+    Keops attention for full attention
+    Don't support head mask
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.attention = KeopsAttentionProduct(config, window=128)
+        
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        ):
+
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+
+        context_layer = self.attention(query_layer, key_layer, value_layer, attention_mask)
+        context_layer = self.reshape_output(context_layer)
+
+        return (context_layer,)

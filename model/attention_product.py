@@ -5,6 +5,7 @@ from numpy import prod
 
 try:
     from pykeops.torch import LazyTensor
+    pykeops.set_bin_folder("./kernels")
 except:
     import logging
     logging.info("pykeops not installed")

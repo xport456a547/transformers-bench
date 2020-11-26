@@ -22,6 +22,7 @@ MODELS = {
     "lsh": (LSHConfig, LSHSelfAttention),        #huggingface  LSH
     "lsh-ft": (LSHFTConfig, LSHFTSelfAttention), #pytorch-fast-transformer LSH
     "keops": (KeopsConfig, KeopsSelfAttention),
+    "keops2": (KeopsConfig, KeopsSelfAttention2),
 }
 
 
