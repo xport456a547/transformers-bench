@@ -5,7 +5,6 @@ from numpy import prod
 
 try:
     from pykeops.torch import LazyTensor
-    pykeops.set_bin_folder("./kernels")
 except:
     import logging
     logging.info("pykeops not installed")
@@ -72,7 +71,7 @@ class KeopsAttentionProduct(nn.Module):
     Keops attention for full attention and efficient attention with low memory print
     Don't support head mask
     """
-    def __init__(self, config, window=None):
+    def __init__(self, config, window=None, stride=1):
 
         super().__init__()
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
@@ -80,6 +79,7 @@ class KeopsAttentionProduct(nn.Module):
 
         self.ranges = None
         self.window = window
+        self.stride = stride
         self.offset = window // 2 if window is not None else None
 
         self.num_attention_heads = config.num_attention_heads
@@ -88,19 +88,22 @@ class KeopsAttentionProduct(nn.Module):
         t, d = sizes[-2:]
         batch = prod(sizes[:-1])
 
-        if self.ranges is None or self.ranges[0].shape[0] != batch:
+        assert t % self.stride == 0
+        w = self.stride
+        n_blocks = t // w
 
-            indices_i = torch.arange(batch).int().to(device)
-            ranges_i = torch.cat([indices_i.unsqueeze(-1), indices_i.unsqueeze(-1) + 1], dim=-1)
-            ranges_i = torch.clamp(ranges_i, min=0, max=batch)
+        if self.ranges is None or self.ranges[1].shape[0] != batch//w:
+            slices_i = torch.arange(batch//w).to(device).int() + 1
 
-            indices_j = torch.arange(-self.offset, -self.offset+t).int().to(device)
-            ranges_j = torch.cat([indices_j.unsqueeze(-1), (indices_j + self.window).unsqueeze(-1)], dim=-1)
-            ranges_j = torch.clamp(ranges_j, min=0, max=t)
-            ranges_j = torch.cat([ranges_j+i*t for i in range(batch//t)], dim=0)
+            idx_i = torch.arange(n_blocks).to(device).int()
+            ranges_i = torch.cat([idx_i.unsqueeze(-1)*w, idx_i.unsqueeze(-1)*w + w], dim=-1).clamp(0, t)
+            ranges_i = torch.cat([ranges_i + i*t for i in range(batch//t)])
 
-            self.ranges = (ranges_i, indices_i + 1, ranges_j)*2
-        
+            ranges_j = torch.cat([idx_i.unsqueeze(-1)*w - self.offset + (w % 2), idx_i.unsqueeze(-1)*w + self.offset], dim=-1).clamp(0, t)
+            ranges_j = torch.cat([ranges_j + i*t for i in range(batch//t)])
+
+            self.ranges = (ranges_i, slices_i, ranges_j)*2
+
     def forward(self, query_layer, key_layer, value_layer, attention_mask=None):
         
         # Expect (..., t, d) shape for query, key, value
@@ -110,11 +113,22 @@ class KeopsAttentionProduct(nn.Module):
         sizes = query_layer.size()
 
         if self.local:
-            query_layer = query_layer.reshape(-1, d)
-            key_layer = key_layer.reshape(-1, d)
-            value_layer = value_layer.reshape(-1, d)
-            if attention_mask is not None:
-                attention_mask = attention_mask.expand(*sizes[:-2], 1, -1).reshape(1, -1)
+            if self.window == self.stride:
+
+                self.local = False
+                query_layer = query_layer.reshape(*sizes[:-2], -1, self.window, d)
+                key_layer = key_layer.reshape(*sizes[:-2], -1, self.window, d)
+                value_layer = value_layer.reshape(*sizes[:-2], -1, self.window, d)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.reshape(*attention_mask.size()[:-1], -1, self.window)
+
+            else:
+
+                query_layer = query_layer.reshape(-1, d)
+                key_layer = key_layer.reshape(-1, d)
+                value_layer = value_layer.reshape(-1, d)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.expand(*sizes[:-2], 1, -1).reshape(1, -1)
 
         reduction_dim = len(query_layer.size()) - 1
 
@@ -122,7 +136,20 @@ class KeopsAttentionProduct(nn.Module):
         query_layer = self.dropout(query_layer)
         key_layer = self.dropout(key_layer)
 
-        q = LazyTensor( query_layer.unsqueeze(-2).contiguous() / math.sqrt(d) )
+        context_layer = self.compute_product(
+            query_layer=query_layer/math.sqrt(d), 
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask, 
+            dim=reduction_dim, 
+            sizes=sizes
+            )
+
+        return context_layer
+    
+    def compute_product(self, query_layer, key_layer, value_layer, attention_mask, dim, sizes):
+        
+        q = LazyTensor( query_layer.unsqueeze(-2).contiguous() )
         k = LazyTensor( key_layer.unsqueeze(-3).contiguous() )
         v = LazyTensor( value_layer.unsqueeze(-3).contiguous() )
 
@@ -136,8 +163,7 @@ class KeopsAttentionProduct(nn.Module):
             self.set_ranges(sizes, query_layer.device)
             attention_scores.ranges = self.ranges
 
-        return attention_scores.sumsoftmaxweight(v, dim=reduction_dim).reshape(*sizes)
-
+        return attention_scores.sumsoftmaxweight(v, dim=dim).reshape(*sizes)
 
 class BlockLocalAttentionProduct(nn.Module):
 
@@ -156,7 +182,14 @@ class BlockLocalAttentionProduct(nn.Module):
             self.w = self.chunk_size // 2
 
         self.overlap = overlap
-        self.attention = BaseAttentionProduct(config)
+
+        try:
+            if config.keops:
+                self.attention = KeopsAttentionProduct(config)
+            else:
+                self.attention = BaseAttentionProduct(config)
+        except:
+            self.attention = BaseAttentionProduct(config)
 
     def forward(self, query_layer, key_layer, value_layer, attention_mask=None):
 

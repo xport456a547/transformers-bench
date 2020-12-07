@@ -240,6 +240,7 @@ class BlockGlobalConfig(BertConfig):
         type_vocab_size=1,
         attention_window=128,
         topk=128,
+        keops=False,
         **kwargs
         ):
         """Constructs BlockGlobalConfig."""
@@ -254,6 +255,7 @@ class BlockGlobalConfig(BertConfig):
         # We keep the same window for all layers
         self.attention_window = [attention_window]
         self.topk = topk
+        self.keops = keops
 
 
 class LSHConfig(BertConfig):
