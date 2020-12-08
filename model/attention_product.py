@@ -86,20 +86,23 @@ class KeopsAttentionProduct(nn.Module):
 
     def set_ranges(self, sizes, device):
         t, d = sizes[-2:]
+        assert t % self.stride == 0
+
         batch = prod(sizes[:-1])
 
-        assert t % self.stride == 0
         w = self.stride
         n_blocks = t // w
+        batch_blocks = batch // w 
 
         if self.ranges is None or self.ranges[1].shape[0] != batch//w:
-            slices_i = torch.arange(batch//w).to(device).int() + 1
+            slices_i = torch.arange(batch_blocks).to(device).int() + 1
 
             idx_i = torch.arange(n_blocks).to(device).int()
             ranges_i = torch.cat([idx_i.unsqueeze(-1)*w, idx_i.unsqueeze(-1)*w + w], dim=-1).clamp(0, t)
             ranges_i = torch.cat([ranges_i + i*t for i in range(batch//t)])
 
-            ranges_j = torch.cat([idx_i.unsqueeze(-1)*w - self.offset + (w % 2), idx_i.unsqueeze(-1)*w + self.offset], dim=-1).clamp(0, t)
+            ranges_j = torch.cat([idx_i.unsqueeze(-1)*w, idx_i.unsqueeze(-1)*w + self.window_size], dim=-1) - self.offset
+            ranges_j = ranges_j.clamp(0, t)
             ranges_j = torch.cat([ranges_j + i*t for i in range(batch//t)])
 
             self.ranges = (ranges_i, slices_i, ranges_j)*2
