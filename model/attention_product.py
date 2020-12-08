@@ -101,7 +101,7 @@ class KeopsAttentionProduct(nn.Module):
             ranges_i = torch.cat([idx_i.unsqueeze(-1)*w, idx_i.unsqueeze(-1)*w + w], dim=-1).clamp(0, t)
             ranges_i = torch.cat([ranges_i + i*t for i in range(batch//t)])
 
-            ranges_j = torch.cat([idx_i.unsqueeze(-1)*w, idx_i.unsqueeze(-1)*w + self.window_size], dim=-1) - self.offset
+            ranges_j = torch.cat([idx_i.unsqueeze(-1)*w, idx_i.unsqueeze(-1)*w + self.window], dim=-1) - self.offset
             ranges_j = ranges_j.clamp(0, t)
             ranges_j = torch.cat([ranges_j + i*t for i in range(batch//t)])
 
