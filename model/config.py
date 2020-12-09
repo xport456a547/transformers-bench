@@ -257,6 +257,33 @@ class BlockGlobalConfig(BertConfig):
         self.topk = topk
         self.keops = keops
 
+class GlobalGlobalConfig(BertConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        topk=128,
+        keops=False,
+        **kwargs
+        ):
+        """Constructs BlockGlobalConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            **kwargs
+            )
+
+        # We keep the same window for all layers
+        self.topk = topk
+        self.keops = keops
+
 
 class LSHConfig(BertConfig):
 

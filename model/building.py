@@ -19,6 +19,7 @@ MODELS = {
     "block": (BlockConfig, BlockSelfAttention),
     "block-local": (BlockLocalConfig, BlockLocalSelfAttention),
     "block-global": (BlockGlobalConfig, BlockGlobalSelfAttention),
+    "global-global": (GlobalGlobalConfig, GlobalGlobalSelfAttention),
     "lsh": (LSHConfig, LSHSelfAttention),        #huggingface  LSH
     "lsh-ft": (LSHFTConfig, LSHFTSelfAttention), #pytorch-fast-transformer LSH
     "keops": (KeopsConfig, KeopsSelfAttention),
