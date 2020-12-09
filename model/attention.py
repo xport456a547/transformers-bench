@@ -508,16 +508,8 @@ class BlockGlobalSelfAttention(BaseSelfAttention):
         self.init_modules(config)
         self.topk = config.topk
 
-        try:
-            if config.keops:
-                self.local_attention = KeopsAttentionProduct(config, window=config.chunk_size, stride=config.chunk_size//2)
-                self.global_attention = KeopsAttentionProduct(config)
-            else:
-                self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
-                self.global_attention = BaseAttentionProduct(config)
-        except:
-            self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
-            self.global_attention = BaseAttentionProduct(config)
+        self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
+        self.global_attention = BaseAttentionProduct(config)
 
     def get_global_index(self, x, mask):
         
