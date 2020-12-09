@@ -509,7 +509,7 @@ class BlockGlobalSelfAttention(BaseSelfAttention):
         self.topk = config.topk
 
         self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
-
+        """
         try:
             if config.keops:
                 self.global_attention = KeopsAttentionProduct(config)
@@ -517,6 +517,8 @@ class BlockGlobalSelfAttention(BaseSelfAttention):
                 self.global_attention = BaseAttentionProduct(config)
         except:
             self.global_attention = BaseAttentionProduct(config)
+        """
+        self.global_attention = BaseAttentionProduct(config)
 
     def get_global_index(self, x, mask):
         
