@@ -651,25 +651,25 @@ class GlobalGlobalSelfAttention(BaseSelfAttention):
         n, h, t, d = query_layer.size()
         
         # Get global indexes
-        idx = self.get_global_index(query_layer, attention_mask).expand(n, h, -1, d)
-
-        # Compute full attention on global indexes
-        global_context = self.global_attention_2(
-            query_layer=query_layer.gather(dim=-2, index=idx),
-            key_layer=key_layer, 
-            value_layer=value_layer, 
-            attention_mask=attention_mask
-            )
-        del idx
-
         idx = self.get_global_index(key_layer, attention_mask).expand(n, h, -1, d)
+
         context_layer = self.global_attention_1(
             query_layer=query_layer, 
             key_layer=key_layer.gather(dim=-2, index=idx), 
             value_layer=value_layer.gather(dim=-2, index=idx), 
             attention_mask=attention_mask.gather(dim=-1, index=idx[:,0,:,0].unsqueeze(1).unsqueeze(1))
             )
+        #del idx
+
+        #idx = self.get_global_index(query_layer, attention_mask).expand(n, h, -1, d)
         
+        global_context = self.global_attention_2(
+            query_layer=query_layer.gather(dim=-2, index=idx),
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
+            )
+
         # Replace global idx with full attention
         context_layer = torch.scatter(context_layer, dim=-2, index=idx.expand(n, h, -1, d), src=global_context)
 
