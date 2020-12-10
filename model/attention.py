@@ -678,6 +678,145 @@ class GlobalGlobalSelfAttention(BaseSelfAttention):
         return (context_layer,)
 
 
+class Global1SelfAttention(BaseSelfAttention):
+    """
+    Compute local attention with overlapping blocs
+    Use global attention for tokens with highest norm
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.topk = config.topk
+
+        self.global_attention = BaseAttentionProduct(config)
+
+    def get_global_index(self, x, mask):
+        
+        n, h, t, d = x.size()
+        if mask is not None:
+            mask = ~mask.transpose(-1, -2).bool()
+            x = x * mask
+        
+        # get <s> and </s>
+        bos = torch.zeros(n, h, 1, 1, device=x.device)
+
+        if mask is not None:
+            eos = (mask.sum(-2, keepdim=True) - 1).expand(n, h, 1, 1)
+            del mask
+        else:
+            eos = torch.zeros_like(bos)
+            eos[:, :, 0, :] = t - 1
+
+        # Get topk tokens with highest norm head wise
+        # Reserve 2 tokens for <s> and </s>
+        norm = torch.norm(x, dim=-1, keepdim=True)
+        idx = torch.topk(norm, k=self.topk-2, dim=-2)[1].expand(n, h, -1, 1)
+        del norm
+
+        # Cat selected tokens
+        idx = torch.cat([bos, idx, eos], dim=-2).long()
+
+        return idx
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        ):
+
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+        n, h, t, d = query_layer.size()
+        
+        # Get global indexes
+        idx = self.get_global_index(query_layer, attention_mask).expand(n, h, -1, d)
+
+        # Compute full attention on global indexes
+        global_context = self.global_attention(
+            query_layer=query_layer.gather(dim=-2, index=idx),
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
+            )
+        
+        # Replace global idx with full attention
+        context_layer = torch.scatter(value_layer, dim=-2, index=idx.expand(n, h, -1, d), src=global_context)
+
+        context_layer = self.reshape_output(context_layer)
+
+        return (context_layer,)
+
+
+class Global2SelfAttention(BaseSelfAttention):
+    """
+    Compute local attention with overlapping blocs
+    Use global attention for tokens with highest norm
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.topk = config.topk
+        
+        self.global_attention = BaseAttentionProduct(config)
+
+    def get_global_index(self, x, mask):
+        
+        n, h, t, d = x.size()
+        if mask is not None:
+            mask = ~mask.transpose(-1, -2).bool()
+            x = x * mask
+        
+        # get <s> and </s>
+        bos = torch.zeros(n, h, 1, 1, device=x.device)
+
+        if mask is not None:
+            eos = (mask.sum(-2, keepdim=True) - 1).expand(n, h, 1, 1)
+            del mask
+        else:
+            eos = torch.zeros_like(bos)
+            eos[:, :, 0, :] = t - 1
+
+        # Get topk tokens with highest norm head wise
+        # Reserve 2 tokens for <s> and </s>
+        norm = torch.norm(x, dim=-1, keepdim=True)
+        idx = torch.topk(norm, k=self.topk-2, dim=-2)[1].expand(n, h, -1, 1)
+        del norm
+
+        # Cat selected tokens
+        idx = torch.cat([bos, idx, eos], dim=-2).long()
+
+        return idx
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        ):
+
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+        n, h, t, d = query_layer.size()
+
+        idx = self.get_global_index(key_layer, attention_mask).expand(n, h, -1, d)
+        context_layer = self.global_attention_1(
+            query_layer=query_layer, 
+            key_layer=key_layer.gather(dim=-2, index=idx), 
+            value_layer=value_layer.gather(dim=-2, index=idx), 
+            attention_mask=attention_mask.gather(dim=-1, index=idx[:,0,:,0].unsqueeze(1).unsqueeze(1))
+            )
+
+        context_layer = self.reshape_output(context_layer)
+
+        return (context_layer,)
+
 
 class LSHSelfAttention(ReformerLSHSelfAttention):
 
