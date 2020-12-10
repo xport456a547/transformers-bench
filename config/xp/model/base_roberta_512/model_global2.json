@@ -1,5 +1,5 @@
 {
-	"model": "global1",
+	"model": "global2",
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,

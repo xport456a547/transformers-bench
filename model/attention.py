@@ -806,7 +806,7 @@ class Global2SelfAttention(BaseSelfAttention):
         n, h, t, d = query_layer.size()
 
         idx = self.get_global_index(key_layer, attention_mask).expand(n, h, -1, d)
-        context_layer = self.global_attention_1(
+        context_layer = self.global_attention(
             query_layer=query_layer, 
             key_layer=key_layer.gather(dim=-2, index=idx), 
             value_layer=value_layer.gather(dim=-2, index=idx), 
