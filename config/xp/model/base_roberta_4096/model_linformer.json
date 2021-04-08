@@ -1,0 +1,10 @@
+{
+	"model": "linformer",
+	"from_pretrained_roberta": true,
+
+	"max_position_embeddings": 512,
+	"sequence_len": 4096,
+
+	"projection_length": 128,
+	"projection_bias": false
+}

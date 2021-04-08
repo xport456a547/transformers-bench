@@ -1,14 +1,11 @@
 import os
 import sys
-
 import logging
 
-
 from transformers import RobertaTokenizerFast
-
-import utils
 from model.building import ModelBuilder
 from model.trainer import pretrain_and_evaluate
+import utils
 
 if __name__ == "__main__":
 
@@ -22,6 +19,9 @@ if __name__ == "__main__":
 
     log_path = "{0}/run.log".format(training_args.output_dir)
 
+    # Fix logger not writting sometimes
+    for handler in logging.root.handlers:
+        logging.root.removeHandler(handler)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",

@@ -1,4 +1,4 @@
---output_dir tmp/2048
+--output_dir tmp/4096
 --warmup_steps 0
 --learning_rate 0.0001
 --weight_decay 0.01
@@ -13,6 +13,6 @@
 --evaluation_strategy steps
 --do_eval
 --dataloader_num_workers 1
---gradient_accumulation_steps 4
+--gradient_accumulation_steps 16
 --eval_accumulation_steps 1
 --logging_first_step

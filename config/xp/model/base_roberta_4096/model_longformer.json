@@ -1,0 +1,9 @@
+{
+	"model": "longformer",
+	"from_pretrained_roberta": true,
+
+	"max_position_embeddings": 512,
+	"sequence_len": 4096,
+
+	"attention_window": 512
+}

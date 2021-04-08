@@ -4,7 +4,7 @@ Transformers-bench aims at comparing several fast transformer models in an NLP s
 
 # Dependies
 * Pytorch >= 1.5.0 (may work with an older version)
-* Transformers >= 3.5.0 
+* Transformers >= 4.0.0 
 
 ### Optional dependencies:
 * [pykeops](https://github.com/getkeops/keops) (requires cmake and gcc/g++ == 7.x to be compatible with cuda>=10.0)
@@ -44,7 +44,7 @@ Monitored metrics are bpc/perplexity, CrossEntropy, Accuracy, f1, precision, rec
 
 ## Datasets
 
-Use `data/prepare_data.sh` to download and prepare (generate train, valid, test splits) the datasets.
+Use `data/prepare_data.sh` to download and prepare (generate train, valid, test splits) the datasets. (requires unzip)
 
 Supported datasets:
  * enwik8 

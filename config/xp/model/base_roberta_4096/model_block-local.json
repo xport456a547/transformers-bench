@@ -1,0 +1,12 @@
+{
+	"model": "block-local",
+	"from_pretrained_roberta": true,
+
+	"max_position_embeddings": 512,
+	"sequence_len": 4096,
+
+	"chunk_size": 128,
+	
+	"keops": false,
+	"circular": true
+}
