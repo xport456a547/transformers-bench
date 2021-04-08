@@ -70,7 +70,7 @@ def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_on
     val_dataset = TextDataset(
         tokenizer=tokenizer,
         file_path=dataset_args.val_datapath,
-        block_size=tokenizer.max_len,
+        block_size=tokenizer.model_max_length,
     )
     if eval_only:
         train_dataset = val_dataset
@@ -81,7 +81,7 @@ def pretrain_and_evaluate(training_args, dataset_args, model, tokenizer, eval_on
         train_dataset = TextDataset(
             tokenizer=tokenizer,
             file_path=dataset_args.train_datapath,
-            block_size=tokenizer.max_len,
+            block_size=tokenizer.model_max_length,
         )
 
     # https://github.com/huggingface/transformers/blob/master/src/transformers/data/data_collator.py

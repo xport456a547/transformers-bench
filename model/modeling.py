@@ -1,4 +1,5 @@
-from transformers.modeling_roberta import *
+from transformers.models.roberta.modeling_roberta import *
+from transformers.activations import ACT2FN
 
 class RobertaForMaskedLM(RobertaPreTrainedModel):
     authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]

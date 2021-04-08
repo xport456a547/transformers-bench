@@ -10,7 +10,7 @@
 --max_grad_norm 5.0
 --per_device_eval_batch_size 7
 --per_device_train_batch_size 8
---evaluate_during_training
+--evaluation_strategy steps
 --do_eval
 --dataloader_num_workers 1
 --gradient_accumulation_steps 16

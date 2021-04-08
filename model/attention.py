@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-from transformers.modeling_longformer import LongformerSelfAttention
-from transformers.modeling_roberta import RobertaSelfAttention
-from transformers.modeling_reformer import LSHSelfAttention as ReformerLSHSelfAttention
-from transformers.modeling_reformer import LocalSelfAttention as ReformerLocalSelfAttention
+from transformers.models.longformer.modeling_longformer import LongformerSelfAttention
+from transformers.models.roberta.modeling_roberta import RobertaSelfAttention
+from transformers.models.reformer.modeling_reformer import LSHSelfAttention as ReformerLSHSelfAttention
+from transformers.models.reformer.modeling_reformer import LocalSelfAttention as ReformerLocalSelfAttention
 
 try:
     from fast_transformers.attention.reformer_attention import ReformerAttention
@@ -81,6 +81,7 @@ class KernelSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -128,6 +129,7 @@ class LinformerSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -173,6 +175,7 @@ class AvgPoolingSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -221,6 +224,7 @@ class MaxPoolingSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -264,6 +268,7 @@ class CosineSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -319,6 +324,7 @@ class EfficientSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -429,7 +435,7 @@ class BlockSelfAttention(BaseSelfAttention):
         super().__init__()
 
         self.init_modules(config)
-        self.attention = BlockLocalAttentionProduct(config, overlap=False)
+        self.attention = BlockAttentionProduct(config)
 
     def forward(
         self,
@@ -438,6 +444,7 @@ class BlockSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -451,20 +458,19 @@ class BlockSelfAttention(BaseSelfAttention):
             )
 
         context_layer = self.reshape_output(context_layer)
-        outputs = (context_layer, )
-        return outputs
+        return (context_layer, )
 
 
 class BlockLocalSelfAttention(BaseSelfAttention):
-    """
+    '''
     Compute local attention with overlapping blocks
-    """
+    '''
 
     def __init__(self, config):
         super().__init__()
 
         self.init_modules(config)
-        self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
+        self.local_attention = BlockLocalAttentionProduct(config, chunk_size=config.chunk_size)
         
     def forward(
         self,
@@ -473,70 +479,69 @@ class BlockLocalSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
-        n, t, d = hidden_states.size()
-
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
 
         n, h, t, d = query_layer.size()
-        
-        # Compute block local attention
+        attention_mask = attention_mask.expand(n, h, 1, t)
+
         context_layer = self.local_attention(
             query_layer=query_layer, 
             key_layer=key_layer, 
             value_layer=value_layer, 
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            global_key=key_layer[:,:,0].unsqueeze(-2),
+            global_value=value_layer[:,:,0].unsqueeze(-2),
+            global_mask=torch.zeros(n, h, 1, 1, device=attention_mask.device)
             )
 
+        bos = torch.softmax(query_layer[...,0,:].unsqueeze(-2) @ key_layer.transpose(-1, -2), dim=-1) @ value_layer
+        context_layer[...,0,:] = bos.squeeze(-2)
         context_layer = self.reshape_output(context_layer)
 
         return (context_layer,)
 
 
 class BlockGlobalSelfAttention(BaseSelfAttention):
-    """
+    '''
     Compute local attention with overlapping blocs
     Use global attention for tokens with highest norm
-    """
+    '''
     def __init__(self, config):
         super().__init__()
 
         self.init_modules(config)
         self.topk = config.topk
-        self.local_attention = BlockLocalAttentionProduct(config, overlap=True)
-        self.global_attention = BaseAttentionProduct(config)
+        self.chunk_size = self.topk*config.factor
 
-    def get_global_index(self, x, mask):
+        self.local_attention = BlockLocalAttentionProduct(config, return_logsumexp=True)
+        self.global_attention = BlockLocalAttentionProduct(config, chunk_size=self.chunk_size, return_logsumexp=True)
+    
+    def get_indexes(self, x, mask):
         
-        n, h, t, d = x.size()
+        x = self.chunk(x, self.chunk_size)
+
+        n, h, b, t, d = x.size()
+        mask = mask.reshape(n, 1, b, 1, t)
+
         if mask is not None:
             mask = ~mask.transpose(-1, -2).bool()
-            x = x * mask
-        
-        # get <s> and </s>
-        bos = torch.zeros(n, h, 1, 1, device=x.device)
 
-        if mask is not None:
-            eos = (mask.sum(-2, keepdim=True) - 1).expand(n, h, 1, 1)
-            del mask
-        else:
-            eos = torch.zeros_like(bos)
-            eos[:, :, 0, :] = t - 1
+        x = x.pow(2).sum(dim=-1, keepdim=True)*mask
+        #x[...,0,:] += 10000
+        idx = x.argsort(dim=-2)
 
-        # Get topk tokens with highest norm head wise
-        # Reserve 2 tokens for <s> and </s>
-        norm = torch.norm(x, dim=-1, keepdim=True)
-        idx = torch.topk(norm, k=self.topk-2, dim=-2)[1].expand(n, h, -1, 1)
-        del norm
+        global_idx = idx[...,-self.topk:,:]
+        local_idx = idx[...,:-self.topk,:]
 
-        # Cat selected tokens
-        idx = torch.cat([bos, idx, eos], dim=-2).long()
+        pad = (torch.arange(b, device=idx.device)*t).reshape(1, 1, b, 1, 1)
+        global_idx = global_idx.gather(dim=-2, index=global_idx.argsort(dim=-2)) + pad
+        local_idx = local_idx.gather(dim=-2, index=local_idx.argsort(dim=-2)) + pad
 
-        return idx
+        return global_idx.reshape(n, h, -1, 1), local_idx.reshape(n, h, -1, 1)
 
     def forward(
         self,
@@ -545,37 +550,141 @@ class BlockGlobalSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
         query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
-        n, h, t, d = query_layer.size()
-        
-        # Compute block local attention
-        context_layer = self.local_attention(
-            query_layer=query_layer, 
-            key_layer=key_layer, 
-            value_layer=value_layer, 
-            attention_mask=attention_mask
+
+        n, h, t, d = key_layer.size()
+
+        # <s> token
+        bos = query_layer[:,:,0].unsqueeze(-2) @ key_layer.transpose(-1, -2) + attention_mask
+        bos = torch.softmax(bos, dim=-1) @ value_layer
+
+        # Get indexes
+        global_idx, local_idx = self.get_indexes(key_layer + self.query.bias.reshape(1, h, 1, d), attention_mask)
+
+        # Get masks
+        attention_mask = attention_mask.expand(n, h, 1, t)
+        attention_mask_global = attention_mask.gather(dim=-1, index=global_idx.transpose(-1, -2))
+        attention_mask = attention_mask.gather(dim=-1, index=local_idx.transpose(-1, -2))
+
+        # Compute local attention
+        local_idx = local_idx.expand(n, h, -1, d)
+        (context_layer, sumexp) = self.local_attention(
+            query_layer, 
+            key_layer.gather(dim=-2, index=local_idx), 
+            value_layer.gather(dim=-2, index=local_idx), 
+            attention_mask,
+            global_key=key_layer[:,:,0].unsqueeze(-2),
+            global_value=value_layer[:,:,0].unsqueeze(-2),
+            global_mask=torch.zeros(n, h, 1, 1, device=local_idx.device)
             )
+        del local_idx
 
-        # Get global indexes
-        idx = self.get_global_index(query_layer, attention_mask).expand(n, h, -1, d)
+        # Compute attention with global tokens
+        global_idx = global_idx.expand(n, h, -1, d)
+        (context_layer_global, sumexp_global) = self.global_attention(
+            query_layer, 
+            key_layer.gather(dim=-2, index=global_idx), 
+            value_layer.gather(dim=-2, index=global_idx), 
+            attention_mask_global)
 
-        # Compute full attention on global indexes
-        global_context = self.global_attention(
-            query_layer=query_layer.gather(dim=-2, index=idx),
-            key_layer=key_layer, 
-            value_layer=value_layer, 
-            attention_mask=attention_mask
-            )
-        
-        # Replace global idx with full attention
-        context_layer = torch.scatter(context_layer, dim=-2, index=idx.expand(n, h, -1, d), src=global_context)
+        del global_idx
 
+        # Merge branches
+        probs = 1/(1 + (sumexp_global - sumexp).exp()).detach()
+        context_layer = context_layer_global + probs*(context_layer - context_layer_global)
+
+        context_layer[...,0,:] = bos.squeeze(-2)
         context_layer = self.reshape_output(context_layer)
 
         return (context_layer,)
+
+    def chunk(self, x, chunk_size):
+        n, h, t, d = x.size()
+        return x.reshape(n, h, -1, chunk_size, d)
+
+
+class BlockGlobalSelfAttentionMerged(BaseSelfAttention):
+    '''
+    Compute local attention with overlapping blocs
+    Use global attention for tokens with highest norm
+    '''
+    def __init__(self, config):
+        super().__init__()
+
+        self.init_modules(config)
+        self.topk = config.topk
+        self.chunk_size = self.topk*config.factor
+
+        self.attention = BlockGlobalAttentionProduct(config, chunk_size=config.chunk_size, topk_chunk_size=self.chunk_size)
+    
+    def get_global_index(self, x, mask):
+        
+        x = self.chunk(x, self.chunk_size)
+
+        n, h, b, t, d = x.size()
+        mask = mask.reshape(n, 1, b, 1, t)
+
+        if mask is not None:
+            mask = ~mask.transpose(-1, -2).bool()
+
+        x = x.norm(dim=-1, keepdim=True)*mask
+        #x[...,0,:] += 10000
+        idx = x.argsort(dim=-2)
+        
+        global_idx = idx[...,-self.topk:,:]
+        local_idx = idx[...,:-self.topk,:]
+
+        pad = (torch.arange(b, device=idx.device)*t).reshape(1, 1, b, 1, 1)
+        global_idx = global_idx.gather(dim=-2, index=global_idx.argsort(dim=-2)) + pad
+        local_idx = local_idx.gather(dim=-2, index=local_idx.argsort(dim=-2)) + pad
+
+        return global_idx.reshape(n, h, -1, 1), local_idx.reshape(n, h, -1, 1)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_value=None,
+        output_attentions=False,
+        ):
+
+        query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+
+        n, h, t, d = key_layer.size()
+
+        global_idx, local_idx = self.get_global_index(key_layer + self.query.bias.reshape(1, h, 1, d), attention_mask)
+
+        context_layer = self.attention(
+            query_layer, 
+            key_layer, 
+            value_layer, 
+            attention_mask,
+            local_idx,
+            global_idx,
+            global_key=key_layer[:,:,0].unsqueeze(-2),
+            global_value=value_layer[:,:,0].unsqueeze(-2),
+            global_mask=torch.zeros(n, h, 1, 1, device=local_idx.device)
+            )
+
+        # <s> token
+        bos = query_layer[:,:,0].unsqueeze(-2) @ key_layer.transpose(-1, -2) + attention_mask
+        bos = torch.softmax(bos, dim=-1) @ value_layer
+        context_layer[...,0,:] = bos.squeeze(-2)
+        
+        context_layer = self.reshape_output(context_layer)
+
+        return (context_layer,)
+
+    def chunk(self, x, chunk_size):
+        n, h, t, d = x.size()
+        return x.reshape(n, h, -1, chunk_size, d)
 
 
 class LSHSelfAttention(ReformerLSHSelfAttention):
@@ -642,6 +751,7 @@ class LSHFTSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 
@@ -689,6 +799,7 @@ class KeopsSelfAttention(BaseSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
         ):
 

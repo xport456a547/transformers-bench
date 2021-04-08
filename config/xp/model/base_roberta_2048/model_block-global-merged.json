@@ -1,13 +1,15 @@
 {
-	"model": "block-global",
+	"model": "block-global-merged",
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,
 	"sequence_len": 2048,
 
 	"chunk_size": 256,
-	"topk": 256,
-	"factor": 2,
+	"topk": 128,
+	"factor": 4,
 
-	"circular": true
+	"circular": true,
+	
+	"keops": false
 }

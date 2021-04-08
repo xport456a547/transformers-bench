@@ -9,3 +9,10 @@ tmp/*
 tmp
 _.py
 nohup.out
+launch.bash
+train_models.bash
+train_models.sh
+test.png
+test2.png
+run_mlm.py
+run_mlm.sh

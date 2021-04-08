@@ -2,7 +2,7 @@ import json
 import os
 from model.attention import *
 from model.modeling import *
-import transformers.modeling_roberta
+import transformers.models.roberta.modeling_roberta
 from model.config import *
 import logging
 
@@ -15,10 +15,11 @@ MODELS = {
     "cosine": (CosineConfig, CosineSelfAttention),
     "efficient": (EfficientConfig, EfficientSelfAttention),
     "longformer": (LongformerConfig, LongformerSelfAttention_),
-    "local": (LocalConfig, LocalSelfAttention),
+    "local": (LocalConfig, LocalSelfAttention), #pytorch-fast-transformer local attention implementation
     "block": (BlockConfig, BlockSelfAttention),
     "block-local": (BlockLocalConfig, BlockLocalSelfAttention),
     "block-global": (BlockGlobalConfig, BlockGlobalSelfAttention),
+    "block-global-merged": (BlockGlobalConfig, BlockGlobalSelfAttentionMerged),
     "lsh": (LSHConfig, LSHSelfAttention),        #huggingface  LSH
     "lsh-ft": (LSHFTConfig, LSHFTSelfAttention), #pytorch-fast-transformer LSH
     "keops": (KeopsConfig, KeopsSelfAttention),
@@ -74,7 +75,7 @@ class ModelBuilder(object):
         """
         (config, attention) = MODELS[self.model_type]
         config = config(**self.config)
-        transformers.modeling_roberta.RobertaSelfAttention = attention
+        transformers.models.roberta.modeling_roberta.RobertaSelfAttention = attention
         return config
 
     def set_positional_embeddings(self, model, config):
@@ -101,6 +102,7 @@ class ModelBuilder(object):
             + [current_position_embeddings_weight[2:last_chunk+2]], dim=0)
 
         model.roberta.embeddings.position_embeddings.weight.data = new_position_embedding_weight
+        model.roberta.embeddings.position_ids = torch.arange(max_pos, device=model.roberta.embeddings.position_ids.device).unsqueeze(0)
         return model, config
 
     def init_global_params(self, model):

@@ -1,5 +1,5 @@
-from transformers.modeling_roberta import RobertaConfig
-from transformers.modeling_bert import BertConfig
+from transformers.models.roberta.modeling_roberta import RobertaConfig
+from transformers.models.bert.modeling_bert import BertConfig
 
 
 class RobertaConfig(BertConfig):
@@ -238,8 +238,9 @@ class BlockGlobalConfig(BertConfig):
         bos_token_id=0,
         eos_token_id=2,
         type_vocab_size=1,
-        attention_window=128,
+        chunk_size=128,
         topk=128,
+        keops=False,
         **kwargs
         ):
         """Constructs BlockGlobalConfig."""
@@ -252,8 +253,9 @@ class BlockGlobalConfig(BertConfig):
             )
 
         # We keep the same window for all layers
-        self.attention_window = [attention_window]
+        self.chunk_size = chunk_size
         self.topk = topk
+        self.keops = keops
 
 
 class LSHConfig(BertConfig):
