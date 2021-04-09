@@ -2,7 +2,7 @@
 
 Transformers-bench aims at comparing several fast transformer models in an NLP setting.
 
-# dependencies
+# Dependencies
 * Pytorch >= 1.5.0 (may work with an older version)
 * Transformers >= 4.0.0 
 
