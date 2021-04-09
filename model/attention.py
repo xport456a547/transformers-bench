@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import math
 
 from transformers.models.longformer.modeling_longformer import LongformerSelfAttention
+from transformers.models.big_bird.modeling_big_bird import BigBirdSelfAttention, BigBirdBlockSparseAttention
 from transformers.models.roberta.modeling_roberta import RobertaSelfAttention
 from transformers.models.reformer.modeling_reformer import LSHSelfAttention as ReformerLSHSelfAttention
 from transformers.models.reformer.modeling_reformer import LocalSelfAttention as ReformerLocalSelfAttention
@@ -685,6 +686,76 @@ class BlockGlobalSelfAttentionMerged(BaseSelfAttention):
     def chunk(self, x, chunk_size):
         n, h, t, d = x.size()
         return x.reshape(n, h, -1, chunk_size, d)
+
+
+class BigBirdBlockSparseAttention_(BigBirdBlockSparseAttention):
+    """
+    Modified module to be compatible with Roberta
+    We use the same attention_window for all layers
+    See: "Longformer: The Long-Document Transformer"
+    https://arxiv.org/abs/2004.05150
+    """
+
+    def __init__(self, config):
+        super().__init__(config=config, seed=config.seed)
+        self.block_size = config.block_size
+        self.max_seqlen = config.sequence_len
+
+    def create_masks_for_block_sparse_attn(self, attention_mask, block_size):
+        """
+        Computes mask
+        See: https://github.com/huggingface/transformers/blob/master/src/transformers/models/big_bird/modeling_big_bird.py
+        In the original implementation, the mask is computed once for all layers. 
+        Here we compute a different random mask each layer since it is a lot easier to implement from HF library
+        """
+        batch_size, seq_length = attention_mask.size()
+
+        def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
+            
+            exp_blocked_to_pad = torch.cat(
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], dim=2
+            )
+            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
+            band_mask.unsqueeze_(1)
+            return band_mask
+
+        blocked_encoder_mask = attention_mask.view(batch_size, seq_length // block_size, block_size)
+        band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
+
+        from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
+        to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
+
+        return blocked_encoder_mask, band_mask, from_mask, to_mask
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_value=None,
+        output_attentions=False,
+        ):
+        
+        # Change {-10000, 0} mask to {0, 1}
+        attention_mask = (1 - attention_mask.bool().float()).squeeze(1).squeeze(1)
+
+        # Compute BigBird mask
+        blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, self.block_size)
+
+        output = super().forward(
+            hidden_states,
+            band_mask=band_mask,
+            from_mask=from_mask,
+            to_mask=to_mask,
+            from_blocked_mask=blocked_encoder_mask,
+            to_blocked_mask=blocked_encoder_mask,
+            output_attentions=output_attentions,
+        )
+        
+        return output
+
 
 
 class LSHSelfAttention(ReformerLSHSelfAttention):

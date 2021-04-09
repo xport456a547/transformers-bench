@@ -30,7 +30,9 @@ Available models:
 * Local (attention window attention, based on HF)
 * Block (non overlapping blocks attention)
 * Block-Local (overlapping blocks to approximate local attn)
-* Block-global (Block-Local + global connection with high norm tokens)
+* Block-Global (Block-Local + extended context with high norm tokens)
+* Block-Global-Merged (Block-Global with merged computation, compatible with KeOps)
+* BigBird ([see](https://arxiv.org/pdf/2007.14062.pdf), based on HF **sparse** implementation)
 * LSH (use HF implementation of [Reformer](https://arxiv.org/abs/2001.04451))
 * LSH-FT (use pytorch-torch-transformers implementation: optional)
 
@@ -55,6 +57,15 @@ Supported datasets:
 
 ## Configuration 
 
+### Training configuration
+
+1 step = forward pass + backward pass + weights update
+For each experiment, we process 2^18 tokens per step.
+
+Example with 2 GPUs, sequence length of 4096 and batch of 2 sequences per GPU:
+* tokens per forward pass = 2 * 4096 * 2 = 16384
+* accumulations steps = 2^18 / 16384 = 16
+
 ### Model configuration 
 
 #### Generic parameters
@@ -72,6 +83,8 @@ Supported datasets:
     * `block`: (BlockConfig, BlockSelfAttention)
     * `block-local`: (BlockLocalConfig, BlockLocalSelfAttention)
     * `block-global`: (BlockGlobalConfig, BlockGlobalSelfAttention)
+    * `block-global-merged`: (BlockGlobalConfig, BlockGlobalSelfAttentionMerged)
+    * `bigbird`: (BigBirdConfig_, BigBirdBlockSparseAttention_)
     * `lsh`: (LSHConfig, LSHSelfAttention)
     * `lsh-ft`: (LSHFTConfig, LSHFTSelfAttention)
     
@@ -84,10 +97,10 @@ Supported datasets:
 * `num_attention_heads`: 12,
 
 * `max_position_embeddings`: 512,
-* `sequence_len`: 512,
+* `sequence_len`: 512, (changed for long range dependency)
 
-* `hidden_dropout_prob`: 0.0,
-* `attention_probs_dropout_prob`: 0.0,
+* `hidden_dropout_prob`: 0.1,
+* `attention_probs_dropout_prob`: 0.1,
 
 
 #### Model specific parameters 
@@ -116,6 +129,14 @@ Supported datasets:
 **Block**
 
 * `chunk_size`
+
+**Block-Global**
+
+* `chunk_size`
+* `topk`
+* `factor`
+* `circular`
+* `keops`(merged version only)
 
 
 ## Dev Tasks

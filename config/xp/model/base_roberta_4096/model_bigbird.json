@@ -1,9 +1,10 @@
 {
-	"model": "longformer",
+	"model": "bigbird",
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,
 	"sequence_len": 4096,
 
-	"attention_window": 256
+	"block_size": 64,
+	"num_random_blocks": 2
 }

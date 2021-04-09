@@ -1,5 +1,6 @@
 from transformers.models.roberta.modeling_roberta import RobertaConfig
 from transformers.models.bert.modeling_bert import BertConfig
+from transformers.models.big_bird.modeling_big_bird import BigBirdConfig
 
 
 class RobertaConfig(BertConfig):
@@ -257,6 +258,41 @@ class BlockGlobalConfig(BertConfig):
         self.topk = topk
         self.keops = keops
 
+class BigBirdConfig_(BigBirdConfig):
+
+    model_type = "roberta"
+
+    def __init__(
+        self,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        type_vocab_size=1,
+        block_size=64,
+        num_random_blocks=2,
+        seed=0, 
+        attention_type="block_sparse",
+        **kwargs
+        ):
+        """Constructs BigBirdConfig."""
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            type_vocab_size=type_vocab_size,
+            block_size=block_size,
+            num_random_blocks=num_random_blocks,
+            seed=seed, 
+            attention_type=attention_type,
+            **kwargs
+            )
+
+        # We keep the same window for all layers
+        self.block_size = block_size
+        self.attention_type = attention_type
+        self.num_random_blocks = num_random_blocks
+        self.seed = seed
+        
 
 class LSHConfig(BertConfig):
 
