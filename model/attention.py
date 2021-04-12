@@ -369,21 +369,9 @@ class LongformerSelfAttention(LongformerSelfAttention):
         return_dict=False,
         ):
 
-        """
-        # Fix HuggingFace dogshit arguments that change every release
-        # Call parent forward pass to handle longformer
-        attention_mask = attention_mask.squeeze(1).squeeze(1)
-        is_index_masked = attention_mask.bool()
+        # Unpack attention mask args for local and global
+        attention_mask, is_index_masked, is_index_global_attn = attention_mask
 
-        # Manually set <s> as global
-        attention_mask[:, 0] = 10000
-
-        is_index_global_attn = torch.zeros_like(attention_mask)
-        is_index_global_attn[:, 0] = 1
-        is_index_global_attn = is_index_global_attn.bool()
-        """
-
-        attention_mask = attention_mask, is_index_masked, is_index_global_attn
         output = super().forward(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -441,6 +429,7 @@ class BlockSelfAttention(BaseSelfAttention):
 
         self.init_modules(config)
         self.attention = BlockAttentionProduct(config)
+        self.use_global = config.use_global
 
     def forward(
         self,
@@ -454,18 +443,29 @@ class BlockSelfAttention(BaseSelfAttention):
         ):
 
         query_layer, key_layer, value_layer = self.project_QKV(hidden_states)
+        n, h, t, d = query_layer.size()
 
-        context_layer = self.attention(
-            query_layer=query_layer, 
-            key_layer=key_layer, 
-            value_layer=value_layer, 
-            attention_mask=attention_mask
+        if self.use_global:
+            context_layer = self.attention(
+                query_layer=query_layer, 
+                key_layer=key_layer, 
+                value_layer=value_layer, 
+                attention_mask=attention_mask,
+                global_key=key_layer[:,:,0].unsqueeze(-2),
+                global_value=value_layer[:,:,0].unsqueeze(-2),
+                global_mask=torch.zeros(n, 1, 1, 1, device=attention_mask.device)
+                )
+        else:
+            context_layer = self.attention(
+                query_layer=query_layer, 
+                key_layer=key_layer, 
+                value_layer=value_layer, 
+                attention_mask=attention_mask
             )
-
         context_layer = self.reshape_output(context_layer)
         return (context_layer, )
 
-
+ 
 class BlockLocalSelfAttention(BaseSelfAttention):
     '''
     Compute local attention with overlapping blocks
@@ -716,32 +716,6 @@ class BigBirdBlockSparseAttention(BigBirdBlockSparseAttention):
         self.block_size = config.block_size
         self.max_seqlen = config.sequence_len
 
-    def create_masks_for_block_sparse_attn(self, attention_mask, block_size):
-        """
-        Computes mask
-        See: https://github.com/huggingface/transformers/blob/master/src/transformers/models/big_bird/modeling_big_bird.py
-        In the original implementation, the mask is computed once for all layers. 
-        Here we compute a different random mask each layer since it is a lot easier to implement from HF library
-        """
-        batch_size, seq_length = attention_mask.size()
-
-        def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
-            
-            exp_blocked_to_pad = torch.cat(
-                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], dim=2
-            )
-            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
-            band_mask.unsqueeze_(1)
-            return band_mask
-
-        blocked_encoder_mask = attention_mask.view(batch_size, seq_length // block_size, block_size)
-        band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
-
-        from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
-        to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
-
-        return blocked_encoder_mask, band_mask, from_mask, to_mask
-
     def forward(
         self,
         hidden_states,
@@ -752,15 +726,10 @@ class BigBirdBlockSparseAttention(BigBirdBlockSparseAttention):
         past_key_value=None,
         output_attentions=False,
         ):
-        
-        """
-        # Change {-10000, 0} mask to {0, 1}
-        attention_mask = (1 - attention_mask.bool().float()).squeeze(1).squeeze(1)
 
-        # Compute BigBird mask
-        blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, self.block_size)
-        """
+        # Unpack mask args
         blocked_encoder_mask, band_mask, from_mask, to_mask = attention_mask
+
         return super().forward(
             hidden_states,
             band_mask=band_mask,

@@ -22,14 +22,14 @@ Available models:
 * Roberta (baseline)
 * Kernel ([see](https://arxiv.org/abs/2006.16236))
 * Linformer ([see](https://arxiv.org/abs/2006.04768))
-* Cosine
-* Avgpooling
+* Cosine (replace dot product with cosine, use an efficient variant)
+* Avgpooling 
 * Maxpooling
 * Efficient ([see](https://arxiv.org/abs/1812.01243))
 * Longformer ([see](https://arxiv.org/abs/2004.05150), based on HF)
-* Local (attention window attention, based on HF)
-* Block (non overlapping blocks attention)
-* Block-Local (overlapping blocks to approximate local attn)
+* Local (attention window attention, based on HF, quite slow)
+* Block (non overlapping blocks attention + optional global connection, very fast & low memory print)
+* Block-Local (similar to longformer model, use blocks for local attn, 60-80% speedup)
 * Block-Global (Block-Local + extended context with high norm tokens)
 * Block-Global-Merged (Block-Global with merged computation, compatible with KeOps)
 * BigBird ([see](https://arxiv.org/pdf/2007.14062.pdf), based on HF **sparse** implementation)
@@ -133,11 +133,13 @@ In this case we duplicate: 2048 = concat[512, 512, 512, 512]
 
 **Block**
 
-* `chunk_size`: *int*, attention window is made of 3 blocks of chunk_size/2
+* `block_size`: *int*, attention window size is equal to block size
+* `use_global`: *bool*, add first token global connection
 
 **Block-local**
 
 * `chunk_size`: *int*, attention window is made of 3 blocks of chunk_size/2
+* `circular`: *bool*, attention window connects to the other side
 * `use_global`: *bool*, add first token global connection
 
 **Block-Global**

@@ -229,32 +229,48 @@ class BlockAttentionProduct(nn.Module):
         """
         super().__init__()
  
-        self.chunk_size = config.chunk_size
+        self.block_size = config.block_size
 
-        assert config.sequence_len % self.chunk_size == 0
+        assert config.sequence_len % self.block_size == 0
 
         self.attention = BaseAttentionProduct(config)
 
-    def forward(self, query_layer, key_layer, value_layer, attention_mask=None):
+    def forward(self, query_layer, key_layer, value_layer, attention_mask=None, global_key=None, global_value=None, global_mask=None):
 
         # expect (..., t, d) shape
         initial_shape = query_layer.size()
 
-        context_layer = self.block_forward(
+        key_layer = self.chunk(key_layer)
+        value_layer = self.chunk(value_layer)
+        attention_mask = self.chunk(attention_mask.transpose(-1, -2)).transpose(-1, -2)
+
+        # Add global tokens
+        key_layer = self.add_global_tokens(key_layer, global_key)
+        value_layer = self.add_global_tokens(value_layer, global_value)
+        attention_mask = self.add_global_tokens(attention_mask, global_mask, dim=-1)
+
+        context_layer = self.attention(
             query_layer=self.chunk(query_layer), 
-            key_layer=self.chunk(key_layer), 
-            value_layer=self.chunk(value_layer), 
-            attention_mask=self.chunk(attention_mask.transpose(-1, -2)).transpose(-1, -2)
+            key_layer=key_layer, 
+            value_layer=value_layer, 
+            attention_mask=attention_mask
             )
 
         return context_layer.reshape(*initial_shape)
 
     def chunk(self, x):
         t, d = x.size()[-2:]
-        return x.reshape(*x.size()[:-2], -1, self.chunk_size, d)
+        return x.reshape(*x.size()[:-2], -1, self.block_size, d)
 
     def dechunk(self, x, initial_shape):
         return x.reshape(*initial_shape)
+
+    def add_global_tokens(self, x, x_global, dim=-2):
+        if x_global is not None:
+            n, h, b, t, d = x.size()
+            x_global = x_global.unsqueeze(-3).expand(-1, -1, b, -1, -1)
+            return torch.cat([x, x_global], dim=dim)
+        return x
 
 
 class BlockLocalAttentionProduct(nn.Module):

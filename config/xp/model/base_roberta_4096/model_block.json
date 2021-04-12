@@ -3,8 +3,8 @@
 	"from_pretrained_roberta": true,
 
 	"max_position_embeddings": 512,
-	"sequence_len": 512,
+	"sequence_len": 4096,
 
-	"block_size": 128,
+	"block_size": 256,
 	"use_global": true
 }

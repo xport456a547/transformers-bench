@@ -155,12 +155,14 @@ class BlockConfig(RobertaConfig):
     def __init__(
         self,
         chunk_size=128,
+        use_global=True,
         **kwargs
         ):
         """Constructs BlockConfig."""
         super().__init__(**kwargs)
 
         self.chunk_size = chunk_size
+        self.use_global = use_global
 
 
 class BlockLocalConfig(RobertaConfig):
