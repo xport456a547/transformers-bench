@@ -8,5 +8,7 @@
 	"chunk_size": 128,
 	
 	"keops": false,
-	"circular": true
+	"circular": true,
+
+	"use_global": true
 }

@@ -5,6 +5,7 @@ from transformers.models.big_bird.modeling_big_bird import BigBirdConfig
 
 class RobertaConfig(BertConfig):
 
+    model = "roberta"
     model_type = "roberta"
 
     def __init__(
@@ -13,6 +14,7 @@ class RobertaConfig(BertConfig):
         bos_token_id=0,
         eos_token_id=2,
         type_vocab_size=1,
+        sequence_len=512,
         **kwargs
         ):
         """Constructs RobertaConfig."""
@@ -24,9 +26,11 @@ class RobertaConfig(BertConfig):
             **kwargs
             )
 
+        self.sequence_len = sequence_len
 
 class KernelConfig(RobertaConfig):
 
+    model = "kernel"
     model_type = "roberta"
 
     def __init__(self, **kwargs):
@@ -34,57 +38,39 @@ class KernelConfig(RobertaConfig):
         super().__init__(**kwargs)
 
 
-class LinformerConfig(BertConfig):
+class LinformerConfig(RobertaConfig):
 
+    model = "linformer"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         sequence_len=512,
         projection_length=128,
         projection_bias=False,
         **kwargs
         ):
         """Constructs LinformerConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
         self.sequence_len = sequence_len
         self.projection_length = projection_length
         self.projection_bias = projection_bias
 
 
-class AvgPoolingConfig(BertConfig):
+class AvgPoolingConfig(RobertaConfig):
 
+    model = "avgpooling"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         kernel_size=8,
         stride=4,
         **kwargs
         ):
         """Constructs AvgPoolingConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
         self.kernel_size = kernel_size
         self.stride = stride
@@ -92,6 +78,7 @@ class AvgPoolingConfig(BertConfig):
 
 class MaxPoolingConfig(AvgPoolingConfig):
 
+    model = "maxpooling"
     model_type = "roberta"
 
     def __init__(self, **kwargs):
@@ -101,6 +88,7 @@ class MaxPoolingConfig(AvgPoolingConfig):
 
 class CosineConfig(RobertaConfig):
 
+    model = "cosine"
     model_type = "roberta"
 
     def __init__(self, **kwargs):
@@ -110,6 +98,7 @@ class CosineConfig(RobertaConfig):
 
 class EfficientConfig(RobertaConfig):
 
+    model = "efficient"
     model_type = "roberta"
 
     def __init__(self, **kwargs):
@@ -117,42 +106,30 @@ class EfficientConfig(RobertaConfig):
         super().__init__(**kwargs)
 
 
-class LongformerConfig(BertConfig):
+class LongformerConfig(RobertaConfig):
 
+    model = "longformer"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         attention_window=128,
         **kwargs
         ):
         """Constructs LongformerConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
         # We keep the same window for all layers
         self.attention_window = [attention_window]
 
 
-class LocalConfig(BertConfig):
+class LocalConfig(RobertaConfig):
 
+    model = "local"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         local_attn_chunk_length=128,
         local_num_chunks_before=1,
         local_num_chunks_after=0,
@@ -160,13 +137,7 @@ class LocalConfig(BertConfig):
         **kwargs
         ):
         """Constructs LocalConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-        )
+        super().__init__(**kwargs)
 
         self.local_attn_chunk_length = local_attn_chunk_length
         self.local_num_chunks_before = local_num_chunks_before
@@ -176,90 +147,62 @@ class LocalConfig(BertConfig):
         self.attention_head_size = self.hidden_size // self.num_attention_heads
   
 
-class BlockConfig(BertConfig):
+class BlockConfig(RobertaConfig):
 
+    model = "block"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
-        sequence_len=512,
-        chunk_size=16,
+        chunk_size=128,
         **kwargs
         ):
         """Constructs BlockConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
-        self.sequence_len = sequence_len
         self.chunk_size = chunk_size
 
 
-class BlockLocalConfig(BertConfig):
+class BlockLocalConfig(RobertaConfig):
 
+    model = "block-local"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
-        attention_window=128,
+        chunk_size=128,
+        use_global=True,
         **kwargs
         ):
         """Constructs BlockLocalConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
-        # We keep the same window for all layers
-        self.attention_window = [attention_window]
+        self.chunk_size = chunk_size
+        self.use_global = use_global
 
+class BlockGlobalConfig(RobertaConfig):
 
-class BlockGlobalConfig(BertConfig):
-
+    model = "block-global"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         chunk_size=128,
         topk=128,
         keops=False,
         **kwargs
         ):
         """Constructs BlockGlobalConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
         # We keep the same window for all layers
         self.chunk_size = chunk_size
         self.topk = topk
         self.keops = keops
 
-class BigBirdConfig_(BigBirdConfig):
+class BigBirdConfig(BigBirdConfig):
 
+    model = "bigbird"
     model_type = "roberta"
 
     def __init__(
@@ -294,16 +237,13 @@ class BigBirdConfig_(BigBirdConfig):
         self.seed = seed
         
 
-class LSHConfig(BertConfig):
+class LSHConfig(RobertaConfig):
 
+    model = "lsh"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         lsh_attn_chunk_length=128,
         num_hashes=4,
         num_buckets=128,
@@ -311,17 +251,10 @@ class LSHConfig(BertConfig):
         lsh_num_chunks_after=0,
         hash_seed=None,
         is_decoder=False,
-        sequence_len=512,
         **kwargs
         ):
         """Constructs LSHConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-        )
+        super().__init__(**kwargs)
 
         self.lsh_attn_chunk_length = lsh_attn_chunk_length
         self.num_hashes = num_hashes
@@ -331,7 +264,6 @@ class LSHConfig(BertConfig):
         self.is_decoder = is_decoder
         self.lsh_attention_probs_dropout_prob = self.attention_probs_dropout_prob
         self.attention_head_size = self.hidden_size // self.num_attention_heads
-        self.sequence_len = sequence_len
 
         self.num_buckets = num_buckets
         if self.num_buckets <= 0:
@@ -354,16 +286,13 @@ class LSHConfig(BertConfig):
         return num_buckets
 
 
-class LSHFTConfig(BertConfig):
+class LSHFTConfig(RobertaConfig):
 
+    model = "lsh-ft"
     model_type = "roberta"
 
     def __init__(
         self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
         sequence_len=512,
         chunk_size=16,
         bits=8,
@@ -371,13 +300,7 @@ class LSHFTConfig(BertConfig):
         **kwargs
             ):
         """Constructs LSHFTConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-            )
+        super().__init__(**kwargs)
 
         self.sequence_len = sequence_len
         self.chunk_size = chunk_size
@@ -385,26 +308,14 @@ class LSHFTConfig(BertConfig):
         self.rounds = rounds
 
 
-class KeopsConfig(BertConfig):
+class KeopsConfig(RobertaConfig):
 
+    model = "keops"
     model_type = "roberta"
 
-    def __init__(
-        self,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        type_vocab_size=1,
-        **kwargs
-        ):
+    def __init__(self, **kwargs):
         """Constructs KeopsConfig."""
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            type_vocab_size=type_vocab_size,
-            **kwargs
-        )
+        super().__init__(**kwargs)
 
 
       

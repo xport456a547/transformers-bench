@@ -1,0 +1,13 @@
+{
+	"model": "block-global",
+	"from_pretrained_roberta": false,
+
+	"max_position_embeddings": 512,
+	"sequence_len": 4096,
+
+	"chunk_size": 256,
+	"topk": 128,
+	"factor": 2,
+
+	"circular": true
+}

@@ -1,0 +1,10 @@
+{
+	"model": "bigbird",
+	"from_pretrained_roberta": false,
+
+	"max_position_embeddings": 4096,
+	"sequence_len": 4096,
+
+	"block_size": 64,
+	"num_random_blocks": 2
+}

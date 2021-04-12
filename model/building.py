@@ -14,13 +14,13 @@ MODELS = {
     "maxpooling": (MaxPoolingConfig, MaxPoolingSelfAttention),
     "cosine": (CosineConfig, CosineSelfAttention),
     "efficient": (EfficientConfig, EfficientSelfAttention),
-    "longformer": (LongformerConfig, LongformerSelfAttention_),
+    "longformer": (LongformerConfig, LongformerSelfAttention),
     "local": (LocalConfig, LocalSelfAttention), #pytorch-fast-transformer local attention implementation
     "block": (BlockConfig, BlockSelfAttention),
     "block-local": (BlockLocalConfig, BlockLocalSelfAttention),
     "block-global": (BlockGlobalConfig, BlockGlobalSelfAttention),
     "block-global-merged": (BlockGlobalConfig, BlockGlobalSelfAttentionMerged),
-    "bigbird": (BigBirdConfig_, BigBirdBlockSparseAttention_),
+    "bigbird": (BigBirdConfig, BigBirdBlockSparseAttention),
     "lsh": (LSHConfig, LSHSelfAttention),        #huggingface  LSH
     "lsh-ft": (LSHFTConfig, LSHFTSelfAttention), #pytorch-fast-transformer LSH
     "keops": (KeopsConfig, KeopsSelfAttention),

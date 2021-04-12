@@ -346,7 +346,7 @@ class EfficientSelfAttention(BaseSelfAttention):
         return (context_layer,)
 
 
-class LongformerSelfAttention_(LongformerSelfAttention):
+class LongformerSelfAttention(LongformerSelfAttention):
     """
     Modified module to be compatible with Roberta
     We use the same attention_window for all layers
@@ -369,6 +369,7 @@ class LongformerSelfAttention_(LongformerSelfAttention):
         return_dict=False,
         ):
 
+        """
         # Fix HuggingFace dogshit arguments that change every release
         # Call parent forward pass to handle longformer
         attention_mask = attention_mask.squeeze(1).squeeze(1)
@@ -379,12 +380,15 @@ class LongformerSelfAttention_(LongformerSelfAttention):
 
         is_index_global_attn = torch.zeros_like(attention_mask)
         is_index_global_attn[:, 0] = 1
+        is_index_global_attn = is_index_global_attn.bool()
+        """
 
+        attention_mask = attention_mask, is_index_masked, is_index_global_attn
         output = super().forward(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             is_index_masked=is_index_masked,
-            is_index_global_attn=is_index_global_attn.bool(),
+            is_index_global_attn=is_index_global_attn,
             is_global_attn=True
         )
         
@@ -472,6 +476,7 @@ class BlockLocalSelfAttention(BaseSelfAttention):
 
         self.init_modules(config)
         self.local_attention = BlockLocalAttentionProduct(config, chunk_size=config.chunk_size)
+        self.use_global = config.use_global
         
     def forward(
         self,
@@ -489,18 +494,28 @@ class BlockLocalSelfAttention(BaseSelfAttention):
         n, h, t, d = query_layer.size()
         attention_mask = attention_mask.expand(n, h, 1, t)
 
-        context_layer = self.local_attention(
-            query_layer=query_layer, 
-            key_layer=key_layer, 
-            value_layer=value_layer, 
-            attention_mask=attention_mask,
-            global_key=key_layer[:,:,0].unsqueeze(-2),
-            global_value=value_layer[:,:,0].unsqueeze(-2),
-            global_mask=torch.zeros(n, h, 1, 1, device=attention_mask.device)
-            )
+        if self.use_global:
+            context_layer = self.local_attention(
+                query_layer=query_layer, 
+                key_layer=key_layer, 
+                value_layer=value_layer, 
+                attention_mask=attention_mask,
+                global_key=key_layer[:,:,0].unsqueeze(-2),
+                global_value=value_layer[:,:,0].unsqueeze(-2),
+                global_mask=torch.zeros(n, h, 1, 1, device=attention_mask.device)
+                )
 
-        bos = torch.softmax(query_layer[...,0,:].unsqueeze(-2) @ key_layer.transpose(-1, -2), dim=-1) @ value_layer
-        context_layer[...,0,:] = bos.squeeze(-2)
+            bos = torch.softmax(query_layer[...,0,:].unsqueeze(-2) @ key_layer.transpose(-1, -2), dim=-1) @ value_layer
+            context_layer[...,0,:] = bos.squeeze(-2)
+
+        else:
+            context_layer = self.local_attention(
+                query_layer=query_layer, 
+                key_layer=key_layer, 
+                value_layer=value_layer, 
+                attention_mask=attention_mask,
+                )
+
         context_layer = self.reshape_output(context_layer)
 
         return (context_layer,)
@@ -688,7 +703,7 @@ class BlockGlobalSelfAttentionMerged(BaseSelfAttention):
         return x.reshape(n, h, -1, chunk_size, d)
 
 
-class BigBirdBlockSparseAttention_(BigBirdBlockSparseAttention):
+class BigBirdBlockSparseAttention(BigBirdBlockSparseAttention):
     """
     Modified module to be compatible with Roberta
     We use the same attention_window for all layers
@@ -738,13 +753,15 @@ class BigBirdBlockSparseAttention_(BigBirdBlockSparseAttention):
         output_attentions=False,
         ):
         
+        """
         # Change {-10000, 0} mask to {0, 1}
         attention_mask = (1 - attention_mask.bool().float()).squeeze(1).squeeze(1)
 
         # Compute BigBird mask
         blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, self.block_size)
-
-        output = super().forward(
+        """
+        blocked_encoder_mask, band_mask, from_mask, to_mask = attention_mask
+        return super().forward(
             hidden_states,
             band_mask=band_mask,
             from_mask=from_mask,
@@ -753,9 +770,6 @@ class BigBirdBlockSparseAttention_(BigBirdBlockSparseAttention):
             to_blocked_mask=blocked_encoder_mask,
             output_attentions=output_attentions,
         )
-        
-        return output
-
 
 
 class LSHSelfAttention(ReformerLSHSelfAttention):

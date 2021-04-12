@@ -1,6 +1,6 @@
 {
 	"model": "longformer",
-	"from_pretrained_roberta": true,
+	"from_pretrained_roberta": false,
 
 	"max_position_embeddings": 512,
 	"sequence_len": 512,

@@ -64,7 +64,7 @@ For each experiment, we process 2^18 tokens per step.
 
 Example with 2 GPUs, sequence length of 4096 and batch of 2 sequences per GPU:
 * tokens per forward pass = 2 * 4096 * 2 = 16384
-* accumulations steps = 2^18 / 16384 = 16
+* accumulation steps = 2^18 / 16384 = 16
 
 ### Model configuration 
 
@@ -78,13 +78,13 @@ Example with 2 GPUs, sequence length of 4096 and batch of 2 sequences per GPU:
     * `maxpooling`: (MaxPoolingConfig, MaxPoolingSelfAttention)
     * `cosine`: (CosineConfig, CosineSelfAttention)
     * `efficient`: (EfficientConfig, EfficientSelfAttention)
-    * `longformer`: (LongformerConfig, LongformerSelfAttention_)
+    * `longformer`: (LongformerConfig, LongformerSelfAttention)
     * `local`: (LocalConfig, LocalSelfAttention)
     * `block`: (BlockConfig, BlockSelfAttention)
     * `block-local`: (BlockLocalConfig, BlockLocalSelfAttention)
     * `block-global`: (BlockGlobalConfig, BlockGlobalSelfAttention)
     * `block-global-merged`: (BlockGlobalConfig, BlockGlobalSelfAttentionMerged)
-    * `bigbird`: (BigBirdConfig_, BigBirdBlockSparseAttention_)
+    * `bigbird`: (BigBirdConfig, BigBirdBlockSparseAttention)
     * `lsh`: (LSHConfig, LSHSelfAttention)
     * `lsh-ft`: (LSHFTConfig, LSHFTSelfAttention)
     
@@ -97,7 +97,7 @@ Example with 2 GPUs, sequence length of 4096 and batch of 2 sequences per GPU:
 * `num_attention_heads`: 12,
 
 * `max_position_embeddings`: 512,
-* `sequence_len`: 512, (changed for long range dependency)
+* `sequence_len`: 512, (change for long range dependencies)
 
 * `hidden_dropout_prob`: 0.1,
 * `attention_probs_dropout_prob`: 0.1,
@@ -105,38 +105,48 @@ Example with 2 GPUs, sequence length of 4096 and batch of 2 sequences per GPU:
 
 #### Model specific parameters 
 
+Models rely on `sequence_len` and  `max_position_embeddings` which can be different.
+For example:
+* `sequence_len`: 2048
+* `max_position_embeddings`: 512
+In this case we duplicate: 2048 = concat[512, 512, 512, 512]
+
 **Pooling models**
 
-* `kernel` 
-* `stride` 
+* `kernel`: *int*, size of kernel
+* `stride`: *int*, size of stride
 
 **Linformer**
 
-* `projection_length`
-* `projection_bias`: false
+* `projection_length`: *int*, projection length inside self attention
+* `projection_bias`: *bool*, use bias
 
 **Longformer**
 
-* `attention_window`
-
+* `attention_window`: *int*, window size, same for all layers
 
 **Reformer**
 
-* `chunk_size`
-* `bits`
-* `rounds`
+* `chunk_size`: *int*, size of chunks
+* `bits`: *int*, number of projections
+* `rounds`: *int*, number of rounds
 
 **Block**
 
-* `chunk_size`
+* `chunk_size`: *int*, attention window is made of 3 blocks of chunk_size/2
+
+**Block-local**
+
+* `chunk_size`: *int*, attention window is made of 3 blocks of chunk_size/2
+* `use_global`: *bool*, add first token global connection
 
 **Block-Global**
 
-* `chunk_size`
-* `topk`
-* `factor`
-* `circular`
-* `keops`(merged version only)
+* `chunk_size`: *int*, attention window is made of 3 blocks of chunk_size/2
+* `topk`: *int*, topk attention window is made of 3 blocks of topk/2
+* `factor`: *int*, select top 1/factor % tokens with highest norm
+* `circular`: *bool*, attention window connects to the other side
+* `keops`: *bool* (merged version only), rely on keops for attention computation, slower but memory efficient
 
 
 ## Dev Tasks
